@@ -46,4 +46,14 @@ class ApplicationController(
             ResponseEntity.notFound().build()
         }
     }
+
+    @GetMapping("/{id}/timeline")
+    fun getTimeline(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            val timeline = applicationService.getApplicationTimeline(id)
+            ResponseEntity.ok(timeline)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.notFound().build()
+        }
+    }
 }

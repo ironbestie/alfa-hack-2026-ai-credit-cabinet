@@ -5,6 +5,8 @@ import com.alfabank.credit.domain.ApplicationStatus
 import com.alfabank.credit.domain.ApplicationSubmittedEvent
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
+import com.alfabank.credit.dto.EventResponse
+import com.alfabank.credit.repository.ApplicationEventRepository
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.CreditProductRepository
@@ -19,7 +21,8 @@ class ApplicationService(
     private val applicationRepository: ApplicationRepository,
     private val companyRepository: CompanyRepository,
     private val productRepository: CreditProductRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val eventRepository: ApplicationEventRepository
 ) {
 
     @Transactional
@@ -89,5 +92,22 @@ class ApplicationService(
             IllegalArgumentException("Application not found")
         }
         return mapToResponse(application)
+    }
+
+    @Transactional(readOnly = true)
+    fun getApplicationTimeline(applicationId: UUID): List<EventResponse> {
+        // Проверяем, что заявка существует
+        if (!applicationRepository.existsById(applicationId)) {
+            throw IllegalArgumentException("Application not found")
+        }
+
+        return eventRepository.findByApplicationIdOrderByTimestampAsc(applicationId).map {
+            EventResponse(
+                timestamp = it.timestamp,
+                eventType = it.eventType.name,
+                description = it.description,
+                actor = it.actor
+            )
+        }
     }
 }
