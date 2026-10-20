@@ -8,5 +8,9 @@ data class ApplicationResponse(
     val id: UUID,
     val status: ApplicationStatus,
     val requestedAmount: BigDecimal,
-    val requestedTermMonths: Int
+    val requestedTermMonths: Int,
+    val riskScore: Int?,
+    val scoringDetails: String?,
+    val approvedAmount: BigDecimal?,
+    val rejectionReason: String?
 )

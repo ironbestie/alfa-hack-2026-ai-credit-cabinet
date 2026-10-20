@@ -2,19 +2,24 @@ package com.alfabank.credit.service
 
 import com.alfabank.credit.domain.Application
 import com.alfabank.credit.domain.ApplicationStatus
+import com.alfabank.credit.domain.ApplicationSubmittedEvent
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.CreditProductRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import java.util.UUID
 
 @Service
 class ApplicationService(
     private val applicationRepository: ApplicationRepository,
     private val companyRepository: CompanyRepository,
-    private val productRepository: CreditProductRepository
+    private val productRepository: CreditProductRepository,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
 
     @Transactional
@@ -43,6 +48,23 @@ class ApplicationService(
         return mapToResponse(saved)
     }
 
+    @Transactional
+    fun submitApplication(applicationId: UUID) {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        if (application.status != ApplicationStatus.DRAFT) {
+            throw IllegalStateException("Only DRAFT applications can be submitted")
+        }
+
+        application.status = ApplicationStatus.SUBMITTED
+        application.updatedAt = Instant.now()
+        applicationRepository.save(application)
+
+        eventPublisher.publishEvent(ApplicationSubmittedEvent(applicationId))
+    }
+
     @Transactional(readOnly = true)
     fun getAllApplications(): List<ApplicationResponse> {
         return applicationRepository.findAll().map { mapToResponse(it) }
@@ -53,7 +75,19 @@ class ApplicationService(
             id = application.id!!,
             status = application.status,
             requestedAmount = application.requestedAmount,
-            requestedTermMonths = application.requestedTermMonths
+            requestedTermMonths = application.requestedTermMonths,
+            riskScore = application.riskScore,
+            scoringDetails = application.scoringDetails,
+            approvedAmount = application.approvedAmount,
+            rejectionReason = application.rejectionReason
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun getApplicationById(id: UUID): ApplicationResponse {
+        val application = applicationRepository.findById(id).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+        return mapToResponse(application)
     }
 }

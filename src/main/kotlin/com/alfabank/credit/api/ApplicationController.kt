@@ -5,6 +5,7 @@ import com.alfabank.credit.dto.CreateApplicationRequest
 import com.alfabank.credit.service.ApplicationService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import java.util.UUID
 
 @RestController
 @RequestMapping("/api/applications")
@@ -15,9 +16,18 @@ class ApplicationController(
     @PostMapping
     fun createApplication(@RequestBody request: CreateApplicationRequest): ResponseEntity<Any> {
         return try {
-            val response = applicationService.createApplication(request)
-            ResponseEntity.ok(response)
+            ResponseEntity.ok(applicationService.createApplication(request))
         } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
+
+    @PostMapping("/{id}/submit")
+    fun submitApplication(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            applicationService.submitApplication(id)
+            ResponseEntity.ok(mapOf("message" to "Application submitted successfully"))
+        } catch (e: Exception) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
     }
@@ -25,5 +35,15 @@ class ApplicationController(
     @GetMapping
     fun listApplications(): List<ApplicationResponse> {
         return applicationService.getAllApplications()
+    }
+
+    @GetMapping("/{id}")
+    fun getApplication(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            val application = applicationService.getApplicationById(id)
+            ResponseEntity.ok(application)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.notFound().build()
+        }
     }
 }
