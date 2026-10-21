@@ -4,6 +4,7 @@ import com.alfabank.credit.domain.*
 import com.alfabank.credit.integration.BkiClient
 import com.alfabank.credit.repository.ApplicationEventRepository
 import com.alfabank.credit.repository.ApplicationRepository
+import com.alfabank.credit.service.SseService
 import com.alfabank.credit.service.scoring.DecisionService
 import com.alfabank.credit.service.scoring.ScoringService
 import org.slf4j.LoggerFactory
@@ -17,57 +18,97 @@ class ApplicationProcessingListener(
     private val eventRepository: ApplicationEventRepository,
     private val scoringService: ScoringService,
     private val decisionService: DecisionService,
-    private val bkiClient: BkiClient
+    private val bkiClient: BkiClient,
+    private val sseService: SseService
 ) {
     private val log = LoggerFactory.getLogger(ApplicationProcessingListener::class.java)
 
     @ApplicationModuleListener
     fun handleApplicationSubmitted(event: ApplicationSubmittedEvent) {
-        log.info(">>> Начинаем обработку заявки: ${event.applicationId}")
+        log.info("Начинаем обработку заявки: ${event.applicationId}")
 
         val application = applicationRepository.findById(event.applicationId).orElse(null) ?: return
 
-        // ЭТАП 1: ENRICHING
-        application.status = ApplicationStatus.ENRICHING
-        application.updatedAt = Instant.now()
-        applicationRepository.save(application)
-        saveEvent(application, ApplicationEventType.DATA_ENRICHED, "Запущен сбор данных из БКИ и ЕГРЮЛ")
-
-        val bkiData = bkiClient.fetchCreditHistory(application.company.inn)
-        log.info(">>> Данные БКИ для ${application.company.inn}: Просрочек - ${bkiData.overdueCount}")
+        updateStatus(
+            application,
+            ApplicationStatus.ENRICHMENT,
+            "ENRICHMENT",
+            "Запущен сбор данных из БКИ и ЕГРЮЛ",
+            ApplicationEventType.DATA_ENRICHED
+        )
 
         Thread.sleep(2000)
 
-        application.status = ApplicationStatus.SCORING
-        application.updatedAt = Instant.now()
-        applicationRepository.save(application)
+        val bkiData = bkiClient.fetchCreditHistory(application.company.inn)
+
+        if (bkiData.rating == "UNKNOWN") {
+            updateStatus(
+                application,
+                ApplicationStatus.MANUAL_REVIEW,
+                "MANUAL_REVIEW",
+                "Сервис БКИ недоступен. Требуется ручная проверка.",
+                ApplicationEventType.STATUS_CHANGED
+            )
+            log.warn("БКИ недоступен. Заявка ${event.applicationId} отправлена в MANUAL_REVIEW.")
+            return
+        }
+
+        updateStatus(
+            application,
+            ApplicationStatus.SCORING,
+            "SCORING",
+            "Оценка риска",
+            ApplicationEventType.STATUS_CHANGED
+        )
+
+        Thread.sleep(2000)
 
         val scoringResult = scoringService.calculateScore(application)
         application.riskScore = scoringResult.score
         application.scoringDetails = scoringResult.details
         applicationRepository.save(application)
 
-        saveEvent(application, ApplicationEventType.SCORING_COMPLETED, "Скоринг завершен. Балл: ${scoringResult.score}. Детали: ${scoringResult.details}")
+        saveEvent(application, ApplicationEventType.SCORING_COMPLETED, "Скоринг завершен. Балл: ${scoringResult.score} (Грейд: ${scoringResult.grade})")
 
         Thread.sleep(2000)
 
         val decisionResult = decisionService.makeDecision(application, scoringResult)
 
-        application.status = decisionResult.status
         application.approvedAmount = decisionResult.approvedAmount
+        application.approvedTermMonths = decisionResult.approvedTermMonths
         application.rejectionReason = decisionResult.rejectionReason
+
+        val decisionMessage = when (decisionResult.status) {
+            ApplicationStatus.APPROVED -> "Кредит одобрен на сумму ${decisionResult.approvedAmount} ₽"
+            ApplicationStatus.COUNTER_OFFER -> "Сформировано контрпредложение на сумму ${decisionResult.approvedAmount} ₽"
+            ApplicationStatus.MANUAL_REVIEW -> "Заявка отправлена на ручное рассмотрение"
+            else -> decisionResult.rejectionReason ?: "Отказ"
+        }
+
+        updateStatus(
+            application,
+            decisionResult.status,
+            decisionResult.status.name,
+            decisionMessage,
+            ApplicationEventType.DECISION_MADE
+        )
+
+        log.info("Обработка заявки завершена: ${event.applicationId}")
+    }
+
+    private fun updateStatus(
+        application: Application,
+        status: ApplicationStatus,
+        sseEventName: String,
+        message: String,
+        eventType: ApplicationEventType
+    ) {
+        application.status = status
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
 
-        val decisionMessage = if (decisionResult.rejectionReason == null) {
-            "Кредит одобрен на сумму ${decisionResult.approvedAmount} ₽"
-        } else {
-            decisionResult.rejectionReason
-        }
-
-        saveEvent(application, ApplicationEventType.DECISION_MADE, decisionResult.rejectionReason ?: decisionMessage)
-
-        log.info(">>> Обработка заявки завершена: ${event.applicationId}")
+        sseService.sendUpdate(application.id.toString(), sseEventName, message)
+        saveEvent(application, eventType, message)
     }
 
     private fun saveEvent(application: Application, type: ApplicationEventType, description: String) {

@@ -16,15 +16,38 @@ class Company(
     val inn: String,
 
     @Column(nullable = false)
+    val ogrn: String,
+
+    @Column(nullable = false)
     val name: String,
 
     @Column(nullable = false)
-    val ogrn: String,
+    val okved: String,
+
+    @Column(nullable = false)
+    val okvedDescription: String,
 
     @Column(nullable = false)
     val directorName: String,
 
+    @Column(nullable = false)
     val registrationDate: LocalDate,
-    val okved: String,
-    val monthlyRevenue: BigDecimal?
+
+    @Column(nullable = false)
+    val category: String,
+
+    @Column(nullable = false)
+    val status: String, // "active"
+
+    @Column(nullable = false)
+    val annualRevenue: BigDecimal,
+
+    @Column(nullable = false)
+    val totalDebt: BigDecimal,
+
+    @Column(nullable = false)
+    val taxDebt: BigDecimal,
+
+    @Column(nullable = false)
+    val bankRelationshipMonths: Int
 )

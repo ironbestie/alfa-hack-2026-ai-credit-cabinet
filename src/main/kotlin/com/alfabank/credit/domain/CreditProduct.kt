@@ -5,7 +5,7 @@ import java.math.BigDecimal
 import java.util.UUID
 
 @Entity
-@Table(name = "credit_products")
+@Table(name = "products")
 class CreditProduct(
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -15,19 +15,23 @@ class CreditProduct(
     val name: String,
 
     @Column(nullable = false)
+    val description: String,
+
+    @Column(nullable = false)
     val minAmount: BigDecimal,
 
     @Column(nullable = false)
     val maxAmount: BigDecimal,
 
     @Column(nullable = false)
-    val minTermMonths: Int,
+    val minTerm: Int,
 
     @Column(nullable = false)
-    val maxTermMonths: Int,
+    val maxTerm: Int,
 
     @Column(nullable = false)
-    val interestRate: Double,
+    val baseRate: Double,
 
-    val requiresCollateral: Boolean = false
+    @Column(nullable = false, length = 1000)
+    val tags: String
 )

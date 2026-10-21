@@ -6,7 +6,19 @@ import java.time.Instant
 import java.util.UUID
 
 enum class ApplicationStatus {
-    DRAFT, SUBMITTED, ENRICHING, SCORING, MANUAL_REVIEW, DECIDED, NEEDS_MORE_INFO, CLOSED, DISBURSED
+    DRAFT,
+    SUBMITTED,
+    ENRICHMENT,
+    SCORING,
+    MANUAL_REVIEW,
+    NEEDS_MORE_INFO,
+    APPROVED,
+    COUNTER_OFFER,
+    REJECTED,
+    SIGNING,
+    FUNDED,
+    CANCELLED,
+    EXPIRED
 }
 
 @Entity

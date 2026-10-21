@@ -42,3 +42,22 @@ app:
     secret-key: ${APP_S3_SECRET_KEY:minioadmin}
     bucket-name: credit-documents
     region: us-east-1
+
+
+  resilience4j:
+    circuitbreaker:
+      instances:
+        bkiService:
+          slidingWindowSize: 10
+          failureRateThreshold: 50
+          waitDurationInOpenState: 10000ms
+          permittedNumberOfCallsInHalfOpenState: 3
+    timelimiter:
+      instances:
+        bkiService:
+          timeoutDuration: 3s
+    retry:
+      instances:
+        bkiService:
+          maxAttempts: 3
+          waitDuration: 1000ms
