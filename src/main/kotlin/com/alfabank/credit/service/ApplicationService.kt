@@ -3,7 +3,7 @@ package com.alfabank.credit.service
 import com.alfabank.credit.domain.*
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
-import com.alfabank.credit.dto.EventResponse
+import com.alfabank.credit.integration.AiAssistantClient
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.ConsentRepository
@@ -22,6 +22,7 @@ class ApplicationService(
     private val consentRepository: ConsentRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val eventService: ApplicationEventService,
+    private val aiAssistantClient: AiAssistantClient,
     private val sseService: SseService
 ) {
     @Transactional
@@ -68,9 +69,8 @@ class ApplicationService(
         val application = applicationRepository.findById(applicationId).orElseThrow {
             IllegalArgumentException("Application not found")
         }
-        if (application.status != ApplicationStatus.DRAFT) {
-            throw IllegalStateException("Only DRAFT applications can be submitted")
-        }
+
+        ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SUBMITTED)
 
         val consents = consentRepository.findByApplicationId(applicationId)
         if (consents.none { it.consentType == "BKI" } || consents.none { it.consentType == "PD" }) {
@@ -81,11 +81,9 @@ class ApplicationService(
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
 
-        application.status = ApplicationStatus.SUBMITTED
-        applicationRepository.save(application)
         sseService.sendUpdate(applicationId.toString(), "SUBMITTED", "Заявка отправлена")
-
         eventService.saveEvent(application, ApplicationEventType.STATUS_CHANGED, "Заявка отправлена на рассмотрение")
+
         eventPublisher.publishEvent(ApplicationSubmittedEvent(applicationId))
     }
 
@@ -126,6 +124,59 @@ class ApplicationService(
             scoringDetails = application.scoringDetails,
             approvedAmount = application.approvedAmount,
             rejectionReason = application.rejectionReason
+        )
+    }
+
+
+    @Transactional(readOnly = true)
+    fun getExplanation(applicationId: UUID): com.alfabank.credit.dto.ExplanationResponse {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        val reasons = mutableListOf<String>()
+        val nextSteps = mutableListOf<String>()
+
+        if (application.scoringDetails != null) {
+            reasons.addAll(application.scoringDetails!!.split(", ").filter { it.isNotBlank() })
+        }
+
+        if (application.status == ApplicationStatus.REJECTED || application.status == ApplicationStatus.COUNTER_OFFER) {
+            nextSteps.add("Погасите мелкие кредиты, и нагрузка снизится.")
+            nextSteps.add("Вернитесь через 3 месяца: мы пересчитаем лимит автоматически.")
+        } else if (application.status == ApplicationStatus.APPROVED) {
+            nextSteps.add("Вы можете принять предложение и подписать документы.")
+        }
+
+        val factsForAi = "Статус заявки: ${application.status}. " +
+                "Причины: ${reasons.joinToString(", ")}. " +
+                "Запрошенная сумма: ${application.requestedAmount}."
+
+        val prompt = "Ты вежливый банковский ассистент. На основе этих данных напиши клиенту краткое объяснение решения (1-2 предложения). " +
+                "Не используй сложные банковские термины. Данные: $factsForAi"
+
+        val aiSummary = aiAssistantClient.generateExplanation(prompt)
+
+        return com.alfabank.credit.dto.ExplanationResponse(
+            summary = aiSummary,
+            reasons = reasons.ifEmpty { listOf("Стандартный риск") },
+            nextSteps = nextSteps
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getPreapprovedOffer(inn: String): com.alfabank.credit.dto.PreapprovedOfferResponse {
+        val company = companyRepository.findAll().find { it.inn == inn }
+            ?: throw IllegalArgumentException("Company not found")
+
+        val maxAmount = company.annualRevenue.divide(java.math.BigDecimal("4")).min(java.math.BigDecimal("30000000"))
+
+        return com.alfabank.credit.dto.PreapprovedOfferResponse(
+            inn = inn,
+            maxAmount = maxAmount.max(java.math.BigDecimal("500000")),
+            termMonths = 24,
+            interestRate = 22.0,
+            confidenceLevel = "PREAPPROVED"
         )
     }
 }

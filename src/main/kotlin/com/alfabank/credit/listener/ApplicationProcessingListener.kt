@@ -37,8 +37,6 @@ class ApplicationProcessingListener(
             ApplicationEventType.DATA_ENRICHED
         )
 
-        Thread.sleep(2000)
-
         val bkiData = bkiClient.fetchCreditHistory(application.company.inn)
 
         if (bkiData.rating == "UNKNOWN") {
@@ -53,6 +51,7 @@ class ApplicationProcessingListener(
             return
         }
 
+        // ЭТАП 2: SCORING
         updateStatus(
             application,
             ApplicationStatus.SCORING,
@@ -61,16 +60,12 @@ class ApplicationProcessingListener(
             ApplicationEventType.STATUS_CHANGED
         )
 
-        Thread.sleep(2000)
-
         val scoringResult = scoringService.calculateScore(application)
         application.riskScore = scoringResult.score
         application.scoringDetails = scoringResult.details
         applicationRepository.save(application)
 
         saveEvent(application, ApplicationEventType.SCORING_COMPLETED, "Скоринг завершен. Балл: ${scoringResult.score} (Грейд: ${scoringResult.grade})")
-
-        Thread.sleep(2000)
 
         val decisionResult = decisionService.makeDecision(application, scoringResult)
 
@@ -103,6 +98,8 @@ class ApplicationProcessingListener(
         message: String,
         eventType: ApplicationEventType
     ) {
+        ApplicationStateMachine.validateTransition(application.status, status)
+
         application.status = status
         application.updatedAt = Instant.now()
         applicationRepository.save(application)

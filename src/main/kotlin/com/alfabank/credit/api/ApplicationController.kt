@@ -112,4 +112,22 @@ class ApplicationController(
     fun streamApplicationStatus(@PathVariable id: UUID): org.springframework.web.servlet.mvc.method.annotation.SseEmitter {
         return sseService.subscribe(id.toString())
     }
+
+    @GetMapping("/{id}/offers")
+    fun getOffers(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            ResponseEntity.ok(decisionService.getOffers(id))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
+
+    @GetMapping("/{id}/explanation")
+    fun getExplanation(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            ResponseEntity.ok(applicationService.getExplanation(id))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
 }
