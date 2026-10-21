@@ -10,6 +10,8 @@ import com.alfabank.credit.repository.ApplicationEventRepository
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.CreditProductRepository
+import com.alfabank.credit.repository.DocumentRepository
+import com.alfabank.credit.service.storage.DocumentStorage
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,6 +24,8 @@ class ApplicationService(
     private val companyRepository: CompanyRepository,
     private val productRepository: CreditProductRepository,
     private val eventPublisher: ApplicationEventPublisher,
+    private val documentStorage: DocumentStorage,
+    private val documentRepository: DocumentRepository,
     private val eventRepository: ApplicationEventRepository
 ) {
 
@@ -96,7 +100,6 @@ class ApplicationService(
 
     @Transactional(readOnly = true)
     fun getApplicationTimeline(applicationId: UUID): List<EventResponse> {
-        // Проверяем, что заявка существует
         if (!applicationRepository.existsById(applicationId)) {
             throw IllegalArgumentException("Application not found")
         }
@@ -109,5 +112,43 @@ class ApplicationService(
                 actor = it.actor
             )
         }
+    }
+
+    @Transactional
+    fun uploadDocument(applicationId: UUID, file: org.springframework.web.multipart.MultipartFile) {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        val fileName = documentStorage.store(file, applicationId.toString())
+        documentRepository.save(com.alfabank.credit.domain.Document(application = application, fileName = fileName))
+
+        if (application.status == ApplicationStatus.NEEDS_MORE_INFO) {
+            application.status = ApplicationStatus.SCORING // Возвращаем в работу
+            application.updatedAt = java.time.Instant.now()
+            applicationRepository.save(application)
+        }
+    }
+
+    @Transactional
+    fun processManagerDecision(applicationId: UUID, isApproved: Boolean, comment: String) {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        if (application.status != ApplicationStatus.MANUAL_REVIEW) {
+            throw IllegalStateException("Application is not in MANUAL_REVIEW status")
+        }
+
+        if (isApproved) {
+            application.status = ApplicationStatus.DECIDED
+            application.approvedAmount = application.requestedAmount
+            application.rejectionReason = "Одобрено менеджером: $comment"
+        } else {
+            application.status = ApplicationStatus.DECIDED
+            application.rejectionReason = "Отклонено менеджером: $comment"
+        }
+        application.updatedAt = java.time.Instant.now()
+        applicationRepository.save(application)
     }
 }

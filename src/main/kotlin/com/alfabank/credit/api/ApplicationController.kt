@@ -56,4 +56,17 @@ class ApplicationController(
             ResponseEntity.notFound().build()
         }
     }
+
+    @PostMapping("/{id}/documents")
+    fun uploadDocument(
+        @PathVariable id: UUID,
+        @RequestParam("file") file: org.springframework.web.multipart.MultipartFile
+    ): ResponseEntity<Any> {
+        return try {
+            applicationService.uploadDocument(id, file)
+            ResponseEntity.ok(mapOf("message" to "Document uploaded"))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
 }
