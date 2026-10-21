@@ -22,7 +22,6 @@ class ScoringService(
 
         val company = application.company
 
-        // 1. Возраст бизнеса
         val yearsInBusiness = company.registrationDate?.let {
             ChronoUnit.YEARS.between(it, LocalDate.now())
         } ?: 0
@@ -35,7 +34,6 @@ class ScoringService(
             reasons.add("Бизнес моложе 1 года (-20)")
         }
 
-        // 2. Выручка
         val revenue = company.monthlyRevenue ?: 0.toBigDecimal()
         if (revenue > 1000000.toBigDecimal()) {
             score += 15
@@ -45,7 +43,6 @@ class ScoringService(
             reasons.add("Низкая выручка (-15)")
         }
 
-        // 3. Сумма к лимиту
         val requestedAmount = application.requestedAmount
         val product = application.product
 
@@ -54,7 +51,6 @@ class ScoringService(
             reasons.add("Запрошена сумма близкая к лимиту (-10)")
         }
 
-        // 4. Данные из БКИ (Кредитная история)
         val bkiData = bkiClient.fetchCreditHistory(company.inn)
         if (bkiData.overdueCount > 0) {
             val penalty = bkiData.overdueCount * 15

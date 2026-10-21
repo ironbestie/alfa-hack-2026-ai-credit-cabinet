@@ -19,7 +19,6 @@ class MockBkiClient : BkiClient {
     override fun fetchCreditHistory(inn: String): BkiData {
         Thread.sleep(1000) // Имитация задержки сети
 
-        // Логика для демо: если ИНН заканчивается на "99", история идеальная. Иначе - есть просрочки.
         return if (inn.endsWith("99")) {
             BkiData(inn, 2, 0, 0, "A")
         } else {

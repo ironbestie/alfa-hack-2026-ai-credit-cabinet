@@ -96,7 +96,6 @@ class ApplicationService(
             IllegalArgumentException("Application not found")
         }
 
-        // Убрали проверку антивируса
         val fileName = documentStorage.store(file, applicationId.toString())
         documentRepository.save(Document(application = application, fileName = fileName))
 
@@ -171,7 +170,6 @@ class ApplicationService(
 
     @Transactional(readOnly = true)
     fun getApplicationTimeline(applicationId: UUID): List<com.alfabank.credit.dto.EventResponse> {
-        // Проверяем, что заявка существует
         if (!applicationRepository.existsById(applicationId)) {
             throw IllegalArgumentException("Application not found")
         }

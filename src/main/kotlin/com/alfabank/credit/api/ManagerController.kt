@@ -24,7 +24,7 @@ class ManagerController(
                 "id" to it.id,
                 "amount" to it.requestedAmount,
                 "score" to it.riskScore,
-                "reason" to it.scoringDetails // <-- Показываем менеджеру
+                "reason" to it.scoringDetails
             )
         })
     }

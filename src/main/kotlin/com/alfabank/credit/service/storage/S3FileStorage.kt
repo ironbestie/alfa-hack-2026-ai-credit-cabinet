@@ -19,7 +19,6 @@ class S3FileStorage(
     private val log = LoggerFactory.getLogger(S3FileStorage::class.java)
 
     init {
-        // Автоматически создаем бакет при старте, если его нет
         try {
             if (s3Client.listBuckets().buckets().none { it.name() == bucketName }) {
                 s3Client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build())
@@ -31,7 +30,6 @@ class S3FileStorage(
     }
 
     override fun store(file: MultipartFile, applicationId: String): String {
-        // Валидация (размер, тип) - оставляем базовую из предыдущего примера
         if (file.isEmpty) throw IllegalArgumentException("File is empty")
         if (file.size > 10 * 1024 * 1024) throw IllegalArgumentException("File size exceeds 10MB")
 

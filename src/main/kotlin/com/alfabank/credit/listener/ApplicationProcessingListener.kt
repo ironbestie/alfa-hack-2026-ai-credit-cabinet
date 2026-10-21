@@ -33,13 +33,11 @@ class ApplicationProcessingListener(
         applicationRepository.save(application)
         saveEvent(application, ApplicationEventType.DATA_ENRICHED, "Запущен сбор данных из БКИ и ЕГРЮЛ")
 
-        // Имитация запроса в БКИ (сохраняем в лог)
         val bkiData = bkiClient.fetchCreditHistory(application.company.inn)
         log.info(">>> Данные БКИ для ${application.company.inn}: Просрочек - ${bkiData.overdueCount}")
 
         Thread.sleep(2000)
 
-        // ЭТАП 2: SCORING
         application.status = ApplicationStatus.SCORING
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
@@ -53,7 +51,6 @@ class ApplicationProcessingListener(
 
         Thread.sleep(2000)
 
-        // ЭТАП 3: DECISION
         val decisionResult = decisionService.makeDecision(application, scoringResult)
 
         application.status = decisionResult.status

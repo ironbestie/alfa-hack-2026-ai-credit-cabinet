@@ -14,12 +14,9 @@ class QuizController(private val productRepository: CreditProductRepository) {
     @PostMapping("/recommend")
     fun recommendProduct(@RequestBody request: QuizRequest): ResponseEntity<Any> {
         val allProducts = productRepository.findAll()
-
-        // Простая rule-based логика
         val recommended = allProducts.filter {
             request.amount >= it.minAmount && request.amount <= it.maxAmount
         }.sortedByDescending { product ->
-            // Чем ниже ставка, тем лучше. Или если цель "оборудование", то отдаем приоритет продуктам с залогом
             if (request.purpose == "ОБОРУДОВАНИЕ" && product.requiresCollateral) 100.0 else -product.interestRate
         }.take(2)
 
