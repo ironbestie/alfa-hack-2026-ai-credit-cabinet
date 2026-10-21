@@ -69,4 +69,14 @@ class ApplicationController(
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
     }
+
+    @PostMapping("/{id}/accept-offer")
+    fun acceptOffer(@PathVariable id: UUID): ResponseEntity<Any> {
+        return try {
+            applicationService.acceptOffer(id)
+            ResponseEntity.ok(mapOf("message" to "Offer accepted, credit disbursed"))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
 }

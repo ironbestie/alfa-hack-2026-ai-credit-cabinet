@@ -18,7 +18,15 @@ class ManagerController(
     @GetMapping("/applications/pending")
     fun getPendingApplications(): ResponseEntity<Any> {
         val apps = applicationRepository.findAll().filter { it.status == ApplicationStatus.MANUAL_REVIEW }
-        return ResponseEntity.ok(apps.map { mapOf("id" to it.id, "amount" to it.requestedAmount, "score" to it.riskScore) })
+
+        return ResponseEntity.ok(apps.map {
+            mapOf(
+                "id" to it.id,
+                "amount" to it.requestedAmount,
+                "score" to it.riskScore,
+                "reason" to it.scoringDetails // <-- Показываем менеджеру
+            )
+        })
     }
 
     @PostMapping("/applications/{id}/decision")

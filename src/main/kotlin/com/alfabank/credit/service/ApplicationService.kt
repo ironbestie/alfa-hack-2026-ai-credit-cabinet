@@ -1,11 +1,8 @@
 package com.alfabank.credit.service
 
-import com.alfabank.credit.domain.Application
-import com.alfabank.credit.domain.ApplicationStatus
-import com.alfabank.credit.domain.ApplicationSubmittedEvent
+import com.alfabank.credit.domain.*
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
-import com.alfabank.credit.dto.EventResponse
 import com.alfabank.credit.repository.ApplicationEventRepository
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
@@ -15,6 +12,7 @@ import com.alfabank.credit.service.storage.DocumentStorage
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.multipart.MultipartFile
 import java.time.Instant
 import java.util.UUID
 
@@ -24,8 +22,8 @@ class ApplicationService(
     private val companyRepository: CompanyRepository,
     private val productRepository: CreditProductRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val documentStorage: DocumentStorage,
     private val documentRepository: DocumentRepository,
+    private val documentStorage: DocumentStorage,
     private val eventRepository: ApplicationEventRepository
 ) {
 
@@ -52,6 +50,8 @@ class ApplicationService(
         )
 
         val saved = applicationRepository.save(application)
+        saveEvent(saved, ApplicationEventType.APPLICATION_CREATED, "Заявка создана")
+
         return mapToResponse(saved)
     }
 
@@ -69,64 +69,42 @@ class ApplicationService(
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
 
+        saveEvent(application, ApplicationEventType.STATUS_CHANGED, "Заявка отправлена на рассмотрение")
         eventPublisher.publishEvent(ApplicationSubmittedEvent(applicationId))
     }
 
-    @Transactional(readOnly = true)
-    fun getAllApplications(): List<ApplicationResponse> {
-        return applicationRepository.findAll().map { mapToResponse(it) }
-    }
-
-    private fun mapToResponse(application: Application): ApplicationResponse {
-        return ApplicationResponse(
-            id = application.id!!,
-            status = application.status,
-            requestedAmount = application.requestedAmount,
-            requestedTermMonths = application.requestedTermMonths,
-            riskScore = application.riskScore,
-            scoringDetails = application.scoringDetails,
-            approvedAmount = application.approvedAmount,
-            rejectionReason = application.rejectionReason
-        )
-    }
-
-    @Transactional(readOnly = true)
-    fun getApplicationById(id: UUID): ApplicationResponse {
-        val application = applicationRepository.findById(id).orElseThrow {
-            IllegalArgumentException("Application not found")
-        }
-        return mapToResponse(application)
-    }
-
-    @Transactional(readOnly = true)
-    fun getApplicationTimeline(applicationId: UUID): List<EventResponse> {
-        if (!applicationRepository.existsById(applicationId)) {
-            throw IllegalArgumentException("Application not found")
-        }
-
-        return eventRepository.findByApplicationIdOrderByTimestampAsc(applicationId).map {
-            EventResponse(
-                timestamp = it.timestamp,
-                eventType = it.eventType.name,
-                description = it.description,
-                actor = it.actor
-            )
-        }
-    }
-
     @Transactional
-    fun uploadDocument(applicationId: UUID, file: org.springframework.web.multipart.MultipartFile) {
+    fun acceptOffer(applicationId: UUID) {
         val application = applicationRepository.findById(applicationId).orElseThrow {
             IllegalArgumentException("Application not found")
         }
 
+        if (application.status != ApplicationStatus.DECIDED || application.approvedAmount == null) {
+            throw IllegalStateException("Application has no approved offer to accept")
+        }
+
+        application.status = ApplicationStatus.DISBURSED
+        application.updatedAt = Instant.now()
+        applicationRepository.save(application)
+
+        saveEvent(application, ApplicationEventType.STATUS_CHANGED, "Клиент принял условия. Кредит выдан на сумму ${application.approvedAmount} ₽")
+    }
+
+    @Transactional
+    fun uploadDocument(applicationId: UUID, file: MultipartFile) {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        // Убрали проверку антивируса
         val fileName = documentStorage.store(file, applicationId.toString())
-        documentRepository.save(com.alfabank.credit.domain.Document(application = application, fileName = fileName))
+        documentRepository.save(Document(application = application, fileName = fileName))
 
         if (application.status == ApplicationStatus.NEEDS_MORE_INFO) {
-            application.status = ApplicationStatus.SCORING // Возвращаем в работу
-            application.updatedAt = java.time.Instant.now()
+            application.status = ApplicationStatus.SCORING
+            application.updatedAt = Instant.now()
             applicationRepository.save(application)
+            saveEvent(application, ApplicationEventType.DOCUMENT_REQUESTED, "Документ загружен, заявка возвращена в работу")
         }
     }
 
@@ -148,7 +126,63 @@ class ApplicationService(
             application.status = ApplicationStatus.DECIDED
             application.rejectionReason = "Отклонено менеджером: $comment"
         }
-        application.updatedAt = java.time.Instant.now()
+        application.updatedAt = Instant.now()
         applicationRepository.save(application)
+
+        saveEvent(application, ApplicationEventType.DECISION_MADE, "Менеджер вынес решение: ${if (isApproved) "Одобрено" else "Отклонено"}")
+    }
+
+    @Transactional(readOnly = true)
+    fun getAllApplications(): List<ApplicationResponse> {
+        return applicationRepository.findAll().map { mapToResponse(it) }
+    }
+
+    @Transactional(readOnly = true)
+    fun getApplicationById(id: UUID): ApplicationResponse {
+        val application = applicationRepository.findById(id).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+        return mapToResponse(application)
+    }
+
+    private fun mapToResponse(application: Application): ApplicationResponse {
+        return ApplicationResponse(
+            id = application.id!!,
+            status = application.status,
+            requestedAmount = application.requestedAmount,
+            requestedTermMonths = application.requestedTermMonths,
+            riskScore = application.riskScore,
+            scoringDetails = application.scoringDetails,
+            approvedAmount = application.approvedAmount,
+            rejectionReason = application.rejectionReason
+        )
+    }
+
+    private fun saveEvent(application: Application, type: ApplicationEventType, description: String) {
+        val event = ApplicationEvent(
+            application = application,
+            eventType = type,
+            description = description
+        )
+        eventRepository.save(event)
+    }
+
+
+
+    @Transactional(readOnly = true)
+    fun getApplicationTimeline(applicationId: UUID): List<com.alfabank.credit.dto.EventResponse> {
+        // Проверяем, что заявка существует
+        if (!applicationRepository.existsById(applicationId)) {
+            throw IllegalArgumentException("Application not found")
+        }
+
+        return eventRepository.findByApplicationIdOrderByTimestampAsc(applicationId).map {
+            com.alfabank.credit.dto.EventResponse(
+                timestamp = it.timestamp,
+                eventType = it.eventType.name,
+                description = it.description,
+                actor = it.actor
+            )
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.alfabank.credit.listener
 
 import com.alfabank.credit.domain.*
+import com.alfabank.credit.integration.BkiClient
 import com.alfabank.credit.repository.ApplicationEventRepository
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.service.scoring.DecisionService
@@ -15,7 +16,8 @@ class ApplicationProcessingListener(
     private val applicationRepository: ApplicationRepository,
     private val eventRepository: ApplicationEventRepository,
     private val scoringService: ScoringService,
-    private val decisionService: DecisionService
+    private val decisionService: DecisionService,
+    private val bkiClient: BkiClient
 ) {
     private val log = LoggerFactory.getLogger(ApplicationProcessingListener::class.java)
 
@@ -25,13 +27,19 @@ class ApplicationProcessingListener(
 
         val application = applicationRepository.findById(event.applicationId).orElse(null) ?: return
 
+        // ЭТАП 1: ENRICHING
         application.status = ApplicationStatus.ENRICHING
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
         saveEvent(application, ApplicationEventType.DATA_ENRICHED, "Запущен сбор данных из БКИ и ЕГРЮЛ")
 
+        // Имитация запроса в БКИ (сохраняем в лог)
+        val bkiData = bkiClient.fetchCreditHistory(application.company.inn)
+        log.info(">>> Данные БКИ для ${application.company.inn}: Просрочек - ${bkiData.overdueCount}")
+
         Thread.sleep(2000)
 
+        // ЭТАП 2: SCORING
         application.status = ApplicationStatus.SCORING
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
@@ -45,6 +53,7 @@ class ApplicationProcessingListener(
 
         Thread.sleep(2000)
 
+        // ЭТАП 3: DECISION
         val decisionResult = decisionService.makeDecision(application, scoringResult)
 
         application.status = decisionResult.status
