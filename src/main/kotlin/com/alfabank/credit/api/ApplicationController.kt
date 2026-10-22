@@ -2,17 +2,25 @@ package com.alfabank.credit.api
 
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
-import com.alfabank.credit.dto.EventResponse
 import com.alfabank.credit.service.ApplicationDecisionService
 import com.alfabank.credit.service.ApplicationDocumentService
 import com.alfabank.credit.service.ApplicationEventService
 import com.alfabank.credit.service.ApplicationService
 import com.alfabank.credit.service.SseService
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.util.UUID
 
+@Tag(name = "Заявки", description = "Создание, отправка и отслеживание статусов заявок")
 @RestController
 @RequestMapping("/api/applications")
 class ApplicationController(
@@ -23,6 +31,11 @@ class ApplicationController(
     private val sseService: SseService
 ) {
 
+    @Operation(summary = "Создать черновик заявки", description = "Возвращает созданную заявку со статусом DRAFT. Требует заголовок Idempotency-Key.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Заявка создана"),
+        ApiResponse(responseCode = "400", description = "Ошибка валидации суммы (вне лимитов продукта)", content = [Content(schema = Schema(implementation = Map::class))])
+    ])
     @PostMapping
     fun createApplication(@RequestBody request: CreateApplicationRequest): ResponseEntity<Any> {
         return try {
@@ -32,13 +45,17 @@ class ApplicationController(
         }
     }
 
+    @Operation(summary = "Получить все заявки", description = "Возвращает список всех заявок (в MVP без фильтрации).")
     @GetMapping
     fun listApplications(): List<ApplicationResponse> {
         return applicationService.getAllApplications()
     }
 
+    @Operation(summary = "Получить карточку заявки", description = "Возвращает полную информацию о заявке, включая балл и причины.")
     @GetMapping("/{id}")
-    fun getApplication(@PathVariable id: UUID): ResponseEntity<Any> {
+    fun getApplication(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
             ResponseEntity.ok(applicationService.getApplicationById(id))
         } catch (e: Exception) {
@@ -46,8 +63,11 @@ class ApplicationController(
         }
     }
 
+    @Operation(summary = "Подписать согласия (218-ФЗ и 152-ФЗ)", description = "Обязательный шаг перед отправкой. Без согласий submit не пройдет.")
     @PostMapping("/{id}/consents")
-    fun signConsents(@PathVariable id: UUID): ResponseEntity<Any> {
+    fun signConsents(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
             applicationService.signConsents(id)
             ResponseEntity.ok(mapOf("message" to "Consents signed"))
@@ -56,8 +76,15 @@ class ApplicationController(
         }
     }
 
+    @Operation(summary = "Отправить заявку", description = "Запускает асинхронный конвейер (ENRICHMENT -> SCORING -> DECISION).")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Заявка отправлена"),
+        ApiResponse(responseCode = "400", description = "Не подписаны согласия или заявка не в статусе DRAFT")
+    ])
     @PostMapping("/{id}/submit")
-    fun submitApplication(@PathVariable id: UUID): ResponseEntity<Any> {
+    fun submitApplication(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
             applicationService.submitApplication(id)
             ResponseEntity.ok(mapOf("message" to "Application submitted successfully"))
@@ -66,30 +93,31 @@ class ApplicationController(
         }
     }
 
-    @PostMapping("/{id}/accept-offer")
-    fun acceptOffer(@PathVariable id: UUID): ResponseEntity<Any> {
+    @Operation(summary = "Получить историю событий (Таймлайн)", description = "Возвращает ленту событий для трекера клиента.")
+    @GetMapping("/{id}/timeline")
+    fun getTimeline(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
-            decisionService.acceptOffer(id)
-            ResponseEntity.ok(mapOf("message" to "Offer accepted"))
+            ResponseEntity.ok(eventService.getApplicationTimeline(id))
         } catch (e: Exception) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+            ResponseEntity.notFound().build()
         }
     }
 
-    @PostMapping("/{id}/sign")
-    fun signOffer(@PathVariable id: UUID): ResponseEntity<Any> {
-        return try {
-            decisionService.signOffer(id)
-            ResponseEntity.ok(mapOf("message" to "Documents signed, funds disbursed"))
-        } catch (e: Exception) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+    @Operation(summary = "SSE-поток статусов", description = "Server-Sent Events для живого трекера без перезагрузки страницы.")
+    @GetMapping("/{id}/stream")
+    fun streamApplicationStatus(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): SseEmitter {
+        return sseService.subscribe(id.toString())
     }
 
+    @Operation(summary = "Загрузить документ", description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов).")
     @PostMapping("/{id}/documents")
     fun uploadDocument(
-        @PathVariable id: UUID,
-        @RequestParam("file") file: MultipartFile
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID,
+        @Parameter(description = "Файл документа") @RequestParam("file") file: MultipartFile
     ): ResponseEntity<Any> {
         return try {
             documentService.uploadDocument(id, file)
@@ -99,22 +127,37 @@ class ApplicationController(
         }
     }
 
-    @GetMapping("/{id}/timeline")
-    fun getTimeline(@PathVariable id: UUID): ResponseEntity<Any> {
+    @Operation(summary = "Принять контрпредложение", description = "Переводит заявку из APPROVED/COUNTER_OFFER в SIGNING.")
+    @PostMapping("/{id}/accept-offer")
+    fun acceptOffer(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
-            ResponseEntity.ok(eventService.getApplicationTimeline(id))
+            decisionService.acceptOffer(id)
+            ResponseEntity.ok(mapOf("message" to "Offer accepted"))
         } catch (e: Exception) {
-            ResponseEntity.notFound().build()
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
     }
 
-    @GetMapping("/{id}/stream")
-    fun streamApplicationStatus(@PathVariable id: UUID): org.springframework.web.servlet.mvc.method.annotation.SseEmitter {
-        return sseService.subscribe(id.toString())
+    @Operation(summary = "Подписать документы и получить деньги", description = "Переводит заявку в финальный статус FUNDED (имитация выдачи).")
+    @PostMapping("/{id}/sign")
+    fun signOffer(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
+        return try {
+            decisionService.signOffer(id)
+            ResponseEntity.ok(mapOf("message" to "Documents signed, funds disbursed"))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
     }
 
+    @Operation(summary = "Получить контрпредложения", description = "Возвращает список из 1-3 офферов, если заявка в статусе COUNTER_OFFER.")
     @GetMapping("/{id}/offers")
-    fun getOffers(@PathVariable id: UUID): ResponseEntity<Any> {
+    fun getOffers(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
             ResponseEntity.ok(decisionService.getOffers(id))
         } catch (e: Exception) {
@@ -122,10 +165,25 @@ class ApplicationController(
         }
     }
 
+    @Operation(summary = "Получить объяснение решения (H3)", description = "Возвращает резюме от LLM, причины (факторы) и следующие шаги.")
     @GetMapping("/{id}/explanation")
-    fun getExplanation(@PathVariable id: UUID): ResponseEntity<Any> {
+    fun getExplanation(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
         return try {
             ResponseEntity.ok(applicationService.getExplanation(id))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
+    }
+
+    @Operation(summary = "Получить балл и грейд (для экрана решения)", description = "Возвращает балл, грейд и вклад факторов.")
+    @GetMapping("/{id}/score")
+    fun getScore(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): ResponseEntity<Any> {
+        return try {
+            ResponseEntity.ok(applicationService.getScore(id))
         } catch (e: Exception) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }

@@ -1,0 +1,426 @@
+openapi: 3.0.1
+info:
+  title: Smart Credit Cabinet API
+  description: API для «Умного кредитного кабинета предпринимателя» (Альфа-Хак 2026)
+  version: "1.0"
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер разработки
+
+tags:
+  - name: Applications
+    description: Управление кредитными заявками
+  - name: Manager
+    description: Кабинет кредитного менеджера (Андеррайтера)
+  - name: Offers
+    description: Контрпредложения (H2)
+  - name: Quiz
+    description: Квиз-подбор продуктов (H5)
+  - name: Auth
+    description: Аутентификация (Basic Auth для Swagger)
+
+paths:
+  # ==========================================
+  # КЛИЕНТСКИЕ ЭНДПОИНТЫ
+  # ==========================================
+  /api/applications:
+    post:
+      tags: [Applications]
+      summary: Создать черновик заявки
+      description: Создает заявку в статусе DRAFT. Требует Idempotency-Key в заголовках.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            example: "req-12345-unique"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApplicationRequest'
+      responses:
+        '200':
+          description: Заявка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '400':
+          description: Неверные данные (например, сумма вне лимитов продукта)
+
+  /api/applications/{id}:
+    get:
+      tags: [Applications]
+      summary: Получить карточку заявки
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Данные заявки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '404':
+          description: Заявка не найдена
+
+  /api/applications/{id}/consents:
+    post:
+      tags: [Applications]
+      summary: Подписать согласия (БКИ и ПДн)
+      description: Обязательный шаг перед отправкой заявки (218-ФЗ и 152-ФЗ).
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Согласия подписаны
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Consents signed"
+
+  /api/applications/{id}/submit:
+    post:
+      tags: [Applications]
+      summary: Отправить заявку на рассмотрение
+      description: Запускает асинхронный конвейер (ENRICHMENT -> SCORING -> DECISION). Требует наличия согласий.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Заявка отправлена
+        '400':
+          description: Не подписаны согласия или неверный статус
+
+  /api/applications/{id}/timeline:
+    get:
+      tags: [Applications]
+      summary: Получить историю событий заявки (Таймлайн)
+      description: Возвращает ленту событий для трекера.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Список событий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventResponse'
+
+  /api/applications/{id}/stream:
+    get:
+      tags: [Applications]
+      summary: SSE-поток статусов заявки
+      description: Server-Sent Events для обновления трекера в реальном времени.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Поток событий (text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/applications/{id}/offers:
+    get:
+      tags: [Offers]
+      summary: Получить контрпредложения (H2)
+      description: Возвращает варианты, если заявка одобрена с изменениями (COUNTER_OFFER).
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Список офферов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferResponse'
+
+  /api/applications/{id}/accept-offer:
+    post:
+      tags: [Offers]
+      summary: Принять контрпредложение
+      description: Переводит заявку в статус SIGNING.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Оффер принят
+
+  /api/applications/{id}/sign:
+    post:
+      tags: [Applications]
+      summary: Подписать документы и получить деньги
+      description: Переводит заявку в финальный статус FUNDED. Требует код из SMS (демо 1234).
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "1234"
+      responses:
+        '200':
+          description: Кредит выдан
+
+  /api/applications/{id}/explanation:
+    get:
+      tags: [Applications]
+      summary: Получить объяснение решения (H3)
+      description: Возвращает резюме от LLM, причины (факторы скоринга) и следующие шаги.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Объяснение решения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExplanationResponse'
+
+  /api/applications/{id}/documents:
+    post:
+      tags: [Applications]
+      summary: Загрузить документ (дозапрос)
+      description: Используется, если заявка в статусе NEEDS_MORE_INFO.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Файл загружен
+
+  /api/quiz/recommend:
+    post:
+      tags: [Quiz]
+      summary: Подобрать продукт по квизу (H5)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose:
+                  type: string
+                  example: "ОБОРУДОВАНИЕ"
+                amount:
+                  type: number
+                  example: 5000000
+                termMonths:
+                  type: integer
+                  example: 24
+      responses:
+        '200':
+          description: Рекомендованные продукты
+
+  /api/offers/preapproved:
+    get:
+      tags: [Offers]
+      summary: Получить предодобренное предложение (H4)
+      parameters:
+        - name: inn
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "7703168426"
+      responses:
+        '200':
+          description: Предодобренная сумма и условия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreapprovedOfferResponse'
+
+  # ==========================================
+  # МЕНЕДЖЕРСКИЕ ЭНДПОИНТЫ
+  # ==========================================
+  /api/manager/applications/pending:
+    get:
+      tags: [Manager]
+      summary: Очередь заявок на ручное рассмотрение
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Список заявок в статусе MANUAL_REVIEW
+
+  /api/manager/applications/{id}/decision:
+    post:
+      tags: [Manager]
+      summary: Вынести решение по заявке
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decisionType:
+                  type: string
+                  enum: [APPROVE, COUNTER_OFFER, REJECT, REQUEST_DOCS]
+                approvedAmount:
+                  type: number
+                approvedTermMonths:
+                  type: integer
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Решение зафиксировано
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: "Введите логин: client или manager, пароль: password"
+
+  parameters:
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: "d1b42044-9499-43b9-9f95-02ff34fc0fda"
+
+  schemas:
+    CreateApplicationRequest:
+      type: object
+      required: [companyId, productId, requestedAmount, requestedTermMonths]
+      properties:
+        companyId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        requestedAmount:
+          type: number
+          example: 5000000
+        requestedTermMonths:
+          type: integer
+          example: 24
+
+    ApplicationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [DRAFT, ENRICHMENT, SCORING, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CANCELLED, EXPIRED]
+        requestedAmount:
+          type: number
+        requestedTermMonths:
+          type: integer
+        riskScore:
+          type: integer
+          nullable: true
+        scoringDetails:
+          type: string
+          nullable: true
+        approvedAmount:
+          type: number
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+
+    OfferResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        termMonths:
+          type: integer
+        interestRate:
+          type: number
+        type:
+          type: string
+          enum: [REQUESTED, LIMIT, GUARANTEE, COLLATERAL]
+
+    ExplanationResponse:
+      type: object
+      properties:
+        summary:
+          type: string
+          example: "Мы проанализировали вашу заявку..."
+        reasons:
+          type: array
+          items:
+            type: string
+        nextSteps:
+          type: array
+          items:
+            type: string
+
+    PreapprovedOfferResponse:
+      type: object
+      properties:
+        inn:
+          type: string
+        maxAmount:
+          type: number
+        termMonths:
+          type: integer
+        interestRate:
+          type: number
+        confidenceLevel:
+          type: string
+          enum: [CALCULATED, PREAPPROVED]
+
+    EventResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        eventType:
+          type: string
+        description:
+          type: string
+        actor:
+          type: string

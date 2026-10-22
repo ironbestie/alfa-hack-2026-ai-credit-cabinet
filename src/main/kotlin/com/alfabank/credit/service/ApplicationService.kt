@@ -1,8 +1,7 @@
 package com.alfabank.credit.service
 
 import com.alfabank.credit.domain.*
-import com.alfabank.credit.dto.ApplicationResponse
-import com.alfabank.credit.dto.CreateApplicationRequest
+import com.alfabank.credit.dto.*
 import com.alfabank.credit.integration.AiAssistantClient
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
@@ -11,6 +10,7 @@ import com.alfabank.credit.repository.CreditProductRepository
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
@@ -114,22 +114,8 @@ class ApplicationService(
             }
     }
 
-    private fun mapToResponse(application: Application): ApplicationResponse {
-        return ApplicationResponse(
-            id = application.id!!,
-            status = application.status,
-            requestedAmount = application.requestedAmount,
-            requestedTermMonths = application.requestedTermMonths,
-            riskScore = application.riskScore,
-            scoringDetails = application.scoringDetails,
-            approvedAmount = application.approvedAmount,
-            rejectionReason = application.rejectionReason
-        )
-    }
-
-
     @Transactional(readOnly = true)
-    fun getExplanation(applicationId: UUID): com.alfabank.credit.dto.ExplanationResponse {
+    fun getExplanation(applicationId: UUID): ExplanationResponse {
         val application = applicationRepository.findById(applicationId).orElseThrow {
             IllegalArgumentException("Application not found")
         }
@@ -138,7 +124,7 @@ class ApplicationService(
         val nextSteps = mutableListOf<String>()
 
         if (application.scoringDetails != null) {
-            reasons.addAll(application.scoringDetails!!.split(", ").filter { it.isNotBlank() })
+            reasons.addAll(application.scoringDetails!!.split("; ").filter { it.isNotBlank() })
         }
 
         if (application.status == ApplicationStatus.REJECTED || application.status == ApplicationStatus.COUNTER_OFFER) {
@@ -157,7 +143,7 @@ class ApplicationService(
 
         val aiSummary = aiAssistantClient.generateExplanation(prompt)
 
-        return com.alfabank.credit.dto.ExplanationResponse(
+        return ExplanationResponse(
             summary = aiSummary,
             reasons = reasons.ifEmpty { listOf("Стандартный риск") },
             nextSteps = nextSteps
@@ -165,18 +151,72 @@ class ApplicationService(
     }
 
     @Transactional(readOnly = true)
-    fun getPreapprovedOffer(inn: String): com.alfabank.credit.dto.PreapprovedOfferResponse {
+    fun getPreapprovedOffer(inn: String): PreapprovedOfferResponse {
         val company = companyRepository.findAll().find { it.inn == inn }
             ?: throw IllegalArgumentException("Company not found")
 
-        val maxAmount = company.annualRevenue.divide(java.math.BigDecimal("4")).min(java.math.BigDecimal("30000000"))
+        val maxAmount = company.annualRevenue.divide(BigDecimal("4")).min(BigDecimal("30000000"))
 
-        return com.alfabank.credit.dto.PreapprovedOfferResponse(
+        return PreapprovedOfferResponse(
             inn = inn,
-            maxAmount = maxAmount.max(java.math.BigDecimal("500000")),
+            maxAmount = maxAmount.max(BigDecimal("500000")),
             termMonths = 24,
             interestRate = 22.0,
             confidenceLevel = "PREAPPROVED"
+        )
+    }
+
+    // НОВЫЙ МЕТОД ДЛЯ ЭКРАНА РЕШЕНИЯ
+    @Transactional(readOnly = true)
+    fun getScore(applicationId: UUID): ScoreResponse {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            IllegalArgumentException("Application not found")
+        }
+
+        if (application.riskScore == null) {
+            throw IllegalStateException("Скоринг для этой заявки еще не выполнен")
+        }
+
+        val factors = mutableListOf<ScoreFactorDto>()
+        if (application.scoringDetails != null) {
+            val parts = application.scoringDetails!!.split("; ")
+            for (part in parts) {
+                val match = Regex("^(.*) \\((-?\\d+)\\)$").find(part)
+                if (match != null) {
+                    val name = match.groupValues[1]
+                    val contribution = match.groupValues[2].toIntOrNull() ?: 0
+                    factors.add(ScoreFactorDto(name, contribution, ""))
+                } else {
+                    factors.add(ScoreFactorDto(part, 0, ""))
+                }
+            }
+        }
+
+        val grade = when {
+            application.riskScore!! >= 700 -> "A"
+            application.riskScore!! >= 600 -> "B"
+            application.riskScore!! >= 500 -> "C"
+            else -> "D"
+        }
+
+        return ScoreResponse(
+            score = application.riskScore!!,
+            grade = grade,
+            riskLevel = if (grade == "A") "low" else if (grade == "D") "high" else "medium",
+            factors = factors
+        )
+    }
+
+    private fun mapToResponse(application: Application): ApplicationResponse {
+        return ApplicationResponse(
+            id = application.id!!,
+            status = application.status,
+            requestedAmount = application.requestedAmount,
+            requestedTermMonths = application.requestedTermMonths,
+            riskScore = application.riskScore,
+            scoringDetails = application.scoringDetails,
+            approvedAmount = application.approvedAmount,
+            rejectionReason = application.rejectionReason
         )
     }
 }
