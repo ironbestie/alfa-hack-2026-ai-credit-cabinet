@@ -6,6 +6,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.core.userdetails.User
 import org.springframework.security.core.userdetails.UserDetailsService
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.provisioning.InMemoryUserDetailsManager
 import org.springframework.security.web.SecurityFilterChain
 
@@ -14,16 +16,21 @@ import org.springframework.security.web.SecurityFilterChain
 class SecurityConfig {
 
     @Bean
-    fun userDetailsService(): UserDetailsService {
-        val client = User.withDefaultPasswordEncoder()
-            .username("client")
-            .password("password")
+    fun passwordEncoder(): PasswordEncoder {
+        return BCryptPasswordEncoder()
+    }
+
+    @Bean
+    fun userDetailsService(passwordEncoder: PasswordEncoder): UserDetailsService {
+        val encodedPassword = passwordEncoder.encode("password")
+
+        val client = User.withUsername("client")
+            .password(encodedPassword)
             .roles("CLIENT")
             .build()
 
-        val manager = User.withDefaultPasswordEncoder()
-            .username("manager")
-            .password("password")
+        val manager = User.withUsername("manager")
+            .password(encodedPassword)
             .roles("MANAGER")
             .build()
 
