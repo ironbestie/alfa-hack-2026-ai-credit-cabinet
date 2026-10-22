@@ -36,6 +36,8 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  mocks:
+    url: ${APP_MOCKS_URL:http://localhost:8089}
   s3:
     endpoint: ${APP_S3_ENDPOINT:http://localhost:9000}
     access-key: ${APP_S3_ACCESS_KEY:minioadmin}
@@ -43,21 +45,20 @@ app:
     bucket-name: credit-documents
     region: us-east-1
 
-
-  resilience4j:
-    circuitbreaker:
-      instances:
-        bkiService:
-          slidingWindowSize: 10
-          failureRateThreshold: 50
-          waitDurationInOpenState: 10000ms
-          permittedNumberOfCallsInHalfOpenState: 3
-    timelimiter:
-      instances:
-        bkiService:
-          timeoutDuration: 3s
-    retry:
-      instances:
-        bkiService:
-          maxAttempts: 3
-          waitDuration: 1000ms
+resilience4j:
+  circuitbreaker:
+    instances:
+      mocksCircuit:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000ms
+        permittedNumberOfCallsInHalfOpenState: 3
+  timelimiter:
+    instances:
+      mocksCircuit:
+        timeoutDuration: 3s
+  retry:
+    instances:
+      mocksRetry:
+        maxAttempts: 3
+        waitDuration: 1000ms

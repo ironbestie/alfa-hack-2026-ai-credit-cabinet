@@ -33,5 +33,36 @@ services:
     ports:
       - "6379:6379"
 
+  mocks:
+    image: wiremock/wiremock:3.9.1
+    container_name: alfa_credit_mocks
+    ports:
+      - "8089:8080"
+    volumes:
+      - ./mocks:/home/wiremock
+    command: ["--verbose"]
+
+  # НАШЕ ПРИЛОЖЕНИЕ
+  app:
+    build: .
+    container_name: alfa_credit_app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/alfa_credit
+      SPRING_DATASOURCE_USERNAME: alfa_admin
+      SPRING_DATASOURCE_PASSWORD: alfa_password
+      APP_S3_ENDPOINT: http://minio:9000
+      APP_S3_ACCESS_KEY: minioadmin
+      APP_S3_SECRET_KEY: minioadmin
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      APP_MOCKS_URL: http://mocks:8080
+    depends_on:
+      - postgres
+      - minio
+      - redis
+      - mocks
+
 volumes:
   pgdata:
