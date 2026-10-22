@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: classpath:application-scorecard.yaml,classpath:application-policy.yaml
   application:
     name: credit
 

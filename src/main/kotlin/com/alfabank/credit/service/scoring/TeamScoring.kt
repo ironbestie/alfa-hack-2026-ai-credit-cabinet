@@ -1,14 +1,12 @@
 package com.alfabank.credit.scoring
 
+import com.alfabank.credit.config.PolicyProperties
+import com.alfabank.credit.config.ScorecardProperties
+import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 
-/**
- * Модель скоринга команды: 10 факторов, балл 0–1000, грейды A–D.
- * Перенос scoring.py на Kotlin. Скоринг только оценивает риск, решение принимает decide().
- * Данные приходят из мок-сервисов (см. mocks/README.md, таблица «Как бэкенд берёт поля»).
- */
 data class ScoringInput(
     val businessAgeMonths: Int,
     val annualRevenue: BigDecimal,
@@ -30,10 +28,8 @@ data class ScoreFactor(
     val points: Int,
     val description: String,
     val reasonCode: String? = null,
-) {
-    /** Вклад в итоговый балл: показываем на экранах, вклады складываются в балл. */
-    val contribution: Int get() = points * TeamScoring.SCALE_MULTIPLIER
-}
+    val contribution: Int = 0 // <-- ДОБАВЛЕНО
+)
 
 data class TeamScoringResult(
     val score: Int,
@@ -43,7 +39,7 @@ data class TeamScoringResult(
 )
 
 data class OfferOption(
-    val kind: String, // REQUESTED, LIMIT, GUARANTEE, COLLATERAL
+    val kind: String,
     val amount: BigDecimal,
     val termMonths: Int,
     val ratePercent: BigDecimal,
@@ -52,23 +48,25 @@ data class OfferOption(
 )
 
 data class DecisionOutcome(
-    val status: String, // APPROVED, COUNTER_OFFER, REJECTED, MANUAL_REVIEW
+    val status: String,
     val reason: String,
     val scoring: TeamScoringResult? = null,
     val offers: List<OfferOption> = emptyList(),
 )
 
-object TeamScoring {
-    const val SCALE_BASE = 600
-    const val SCALE_MULTIPLIER = 2
-    private val HIGH_RISK_OKVED = listOf("56.", "41.", "42.", "43.")
-    private val LIMIT_SHARE = mapOf("A" to BigDecimal("0.40"), "B" to BigDecimal("0.30"), "C" to BigDecimal("0.20"))
-    private val RATE_ADDON = mapOf("A" to BigDecimal("0.0"), "B" to BigDecimal("0.5"), "C" to BigDecimal("1.0"))
-    private val MANUAL_REVIEW_OVER = BigDecimal("10000000")
-    private val GUARANTEE_RATE = BigDecimal("19.5")
-    private val COLLATERAL_DISCOUNT = BigDecimal("2.0")
-    private val STEP = BigDecimal("100000")
-    private val MC = MathContext.DECIMAL64
+@Component
+class TeamScoringService(
+    private val scorecard: ScorecardProperties,
+    private val policy: PolicyProperties
+) {
+    companion object {
+        private val HIGH_RISK_OKVED = listOf("56.", "41.", "42.", "43.")
+        private val MANUAL_REVIEW_OVER = BigDecimal("10000000")
+        private val GUARANTEE_RATE = BigDecimal("19.5")
+        private val COLLATERAL_DISCOUNT = BigDecimal("2.0")
+        private val STEP = BigDecimal("100000")
+        private val MC = MathContext.DECIMAL64
+    }
 
     fun score(input: ScoringInput): TeamScoringResult {
         val f = mutableListOf<ScoreFactor>()
@@ -109,7 +107,7 @@ object TeamScoring {
         // 6. Налоговая задолженность
         if (input.taxDebt.signum() == 0) f += ScoreFactor("Нет налоговой задолженности", 10, "0 ₽")
         else f += ScoreFactor("Есть налоговая задолженность", -30, "${input.taxDebt.toPlainString()} ₽", "R04")
-        // 7. Отраслевой риск: общепит и стройка по префиксу ОКВЭД
+        // 7. Отраслевой риск
         if (HIGH_RISK_OKVED.any { input.okved.startsWith(it) }) f += ScoreFactor("Высокорисковая отрасль", -15, input.okved)
         // 8. Сумма кредита к выручке
         val loanToRevenue = input.requestedAmount.divide(revenue.max(BigDecimal.ONE), MC)
@@ -122,18 +120,22 @@ object TeamScoring {
         // 10. Клиент банка больше года
         if (input.bankRelationshipMonths >= 12) f += ScoreFactor("Клиент банка больше года", 15, "${input.bankRelationshipMonths} мес.")
 
-        val score = (SCALE_BASE + SCALE_MULTIPLIER * f.sumOf { it.points }).coerceIn(0, 1000)
-        val grade = when {
-            score >= 700 -> "A"
-            score >= 600 -> "B"
-            score >= 500 -> "C"
-            else -> "D"
-        }
+        // ИСПОЛЬЗУЕМ YAML ДЛЯ БАЗЫ И МНОЖИТЕЛЯ
+        val rawScore = scorecard.base.baseValue + scorecard.base.multiplier * f.sumOf { it.points }
+        val score = rawScore.coerceIn(0, 1000)
+
+        // ИСПОЛЬЗУЕМ YAML ДЛЯ ГРЕЙДОВ
+        val grade = scorecard.grades.entries
+            .sortedByDescending { it.value }
+            .firstOrNull { score >= it.value }?.key ?: "D"
+
         val risk = when (grade) { "A" -> "low"; "D" -> "high"; else -> "medium" }
-        return TeamScoringResult(score, grade, risk, f)
+
+        val finalFactors = f.map { it.copy(contribution = it.points * scorecard.base.multiplier) }
+
+        return TeamScoringResult(score, grade, risk, finalFactors)
     }
 
-    /** Стоп-факторы до скоринга; тексты для клиента нейтральные. */
     fun stopFactor(input: ScoringInput): String? = when {
         input.companyStatus != "ACTIVE" -> "Компания ликвидирована или находится в процессе ликвидации"
         input.accountsSuspended -> "Операции по счетам компании приостановлены"
@@ -147,10 +149,14 @@ object TeamScoring {
             return DecisionOutcome("MANUAL_REVIEW", "Нужна ручная проверка специалистом")
         }
         val result = score(input)
-        if (result.grade == "D") return DecisionOutcome("REJECTED", "Грейд D, балл ${result.score}", result)
+        if (result.grade == "D" || result.grade == "E") return DecisionOutcome("REJECTED", "Грейд ${result.grade}, балл ${result.score}", result)
 
-        val rate = productRatePercent + RATE_ADDON.getValue(result.grade)
-        val limit = roundDown(input.annualRevenue.multiply(LIMIT_SHARE.getValue(result.grade)))
+        // ИСПОЛЬЗУЕМ YAML ДЛЯ ПОЛИТИКИ
+        val gradePolicy = policy.grades[result.grade] ?: return DecisionOutcome("REJECTED", "Политика для грейда не найдена", result)
+
+        val rate = productRatePercent.add(BigDecimal(gradePolicy.rateSurcharge))
+        val limit = roundDown(input.annualRevenue.multiply(BigDecimal(gradePolicy.maxAmountPctRevenue).divide(BigDecimal(100))))
+
         val amount = input.requestedAmount
         if (amount <= limit) {
             return DecisionOutcome("APPROVED", "Грейд ${result.grade}, сумма в пределах лимита", result,
@@ -160,7 +166,7 @@ object TeamScoring {
         val offers = listOf(
             offer("LIMIT", limit, input.termMonths, rate),
             offer("GUARANTEE", amount, maxOf(input.termMonths, 36), GUARANTEE_RATE),
-            offer("COLLATERAL", middle, input.termMonths + 6, productRatePercent - COLLATERAL_DISCOUNT),
+            offer("COLLATERAL", middle, input.termMonths + 6, productRatePercent.subtract(COLLATERAL_DISCOUNT)),
         )
         return DecisionOutcome("COUNTER_OFFER", "Сумма больше лимита грейда ${result.grade}: ${limit.toPlainString()} ₽", result, offers)
     }

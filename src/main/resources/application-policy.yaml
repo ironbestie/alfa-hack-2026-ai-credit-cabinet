@@ -1,0 +1,18 @@
+policy:
+  grades:
+    A:
+      rate-surcharge: 0.0
+      max-amount-pct-revenue: 40
+      max-amount-pct-revenue-guarantee: 0
+    B:
+      rate-surcharge: 0.5
+      max-amount-pct-revenue: 30
+      max-amount-pct-revenue-guarantee: 0
+    C:
+      rate-surcharge: 1.0
+      max-amount-pct-revenue: 20
+      max-amount-pct-revenue-guarantee: 35
+    D:
+      rate-surcharge: 4.5
+      max-amount-pct-revenue: 10
+      max-amount-pct-revenue-guarantee: 25

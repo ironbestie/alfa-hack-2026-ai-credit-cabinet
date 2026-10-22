@@ -3,28 +3,24 @@ package com.alfabank.credit.service.scoring
 import com.alfabank.credit.domain.Application
 import com.alfabank.credit.integration.MockIntegrationClient
 import com.alfabank.credit.scoring.ScoringInput
-import com.alfabank.credit.scoring.TeamScoring
 import com.alfabank.credit.scoring.TeamScoringResult
+import com.alfabank.credit.scoring.TeamScoringService
 import org.springframework.stereotype.Service
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-data class ScoringPayload(
-    val input: ScoringInput,
-    val result: TeamScoringResult
-)
+data class ScoringPayload(val input: ScoringInput, val result: TeamScoringResult)
 
 @Service
 class ScoringService(
-    private val mockClient: MockIntegrationClient
+    private val mockClient: MockIntegrationClient,
+    private val teamScoringService: TeamScoringService // <-- Внедрили
 ) {
     fun calculateScore(application: Application): ScoringPayload {
         val company = application.company
-        val inn = company.inn
-
-        val egrul = mockClient.getEgrul(inn)
-        val fns = mockClient.getFns(inn)
-        val bki = mockClient.getBki(inn)
+        val egrul = mockClient.getEgrul(company.inn)
+        val fns = mockClient.getFns(company.inn)
+        val bki = mockClient.getBki(company.inn)
 
         val ageMonths = ChronoUnit.MONTHS.between(company.registrationDate, LocalDate.now()).toInt()
 
@@ -44,7 +40,7 @@ class ScoringService(
             accountsSuspended = fns?.accountsSuspended ?: false
         )
 
-        val result = TeamScoring.score(input)
+        val result = teamScoringService.score(input) // <-- Вызов
         return ScoringPayload(input, result)
     }
 }

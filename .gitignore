@@ -32,4 +32,4 @@ build/
 ### VS Code ###
 .vscode/
 
-minio_data
+minio_data/

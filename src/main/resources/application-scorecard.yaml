@@ -1,0 +1,9 @@
+scorecard:
+  base:
+    base-value: 600
+    multiplier: 2
+  grades:
+    A: 700
+    B: 600
+    C: 500
+    D: 0
