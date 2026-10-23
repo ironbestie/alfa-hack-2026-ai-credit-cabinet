@@ -4,10 +4,6 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 
-/**
- * Единая логика расчёта аннуитетного платежа и переплаты.
- * Суммы округляются до 100 ₽ так же, как в макетах кейса.
- */
 object OfferMath {
     private val MC = MathContext.DECIMAL64
     private val HUNDRED = BigDecimal("100")

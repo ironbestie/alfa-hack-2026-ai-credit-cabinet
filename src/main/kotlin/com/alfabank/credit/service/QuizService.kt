@@ -26,6 +26,6 @@ class QuizService(private val productRepository: CreditProductRepository) {
                 purpose == "РАЗРЫВ" && product.name.contains("Овердрафт") -> 100.0
                 else -> -product.baseRate
             }
-        }.take(2) // Возвращаем 2 лучших продукта
+        }.take(2)
     }
 }

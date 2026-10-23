@@ -24,9 +24,6 @@ tags:
     description: Аутентификация (Basic Auth для Swagger)
 
 paths:
-  # ==========================================
-  # КЛИЕНТСКИЕ ЭНДПОИНТЫ
-  # ==========================================
   /api/applications:
     post:
       tags: [Applications]
@@ -294,9 +291,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PreapprovedOfferResponse'
 
-  # ==========================================
-  # СПРАВОЧНИКИ
-  # ==========================================
   /api/companies:
     get:
       tags: [Companies]
@@ -347,9 +341,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductPage'
 
-  # ==========================================
-  # МЕНЕДЖЕРСКИЕ ЭНДПОИНТЫ
-  # ==========================================
   /api/manager/applications/pending:
     get:
       tags: [Manager]

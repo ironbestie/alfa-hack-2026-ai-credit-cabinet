@@ -12,11 +12,6 @@ data class ScoringFactorRecord(
     val description: String = ""
 )
 
-/**
- * Хранит факторы скоринга в существующем текстовом поле scoringDetails.
- * Новый формат — JSON (код причины + подпись + вклад), старый формат
- * "Название (баллы)" продолжает читаться для уже созданных заявок.
- */
 @Component
 class ScoringDetailsCodec(
     private val objectMapper: ObjectMapper

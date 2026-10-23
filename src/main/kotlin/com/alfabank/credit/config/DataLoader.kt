@@ -33,10 +33,6 @@ class DataLoader(
         backfillApplicationOwners()
     }
 
-    /**
-     * ИНН должны совпадать с данными в mocks/__files, иначе ЕГРЮЛ/ФНС/БКИ вернут 404
-     * и заявка уйдёт в MANUAL_REVIEW из-за недоступности источников.
-     */
     private fun seedCompanies() {
         val companies = listOf(
             Company(
@@ -116,10 +112,6 @@ class DataLoader(
         ))
     }
 
-    /**
-     * У старых заявок нет владельца — назначаем демо-клиента, чтобы не ломать доступ после
-     * включения проверки ownerUsername.
-     */
     private fun backfillApplicationOwners() {
         val orphaned = applicationRepository.findAll().filter { it.ownerUsername == null }
         if (orphaned.isEmpty()) return

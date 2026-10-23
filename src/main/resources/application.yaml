@@ -61,7 +61,6 @@ app:
 
 resilience4j:
   circuitbreaker:
-    # CircuitBreaker снаружи, Retry внутри: сначала все попытки, затем fallback.
     circuitBreakerAspectOrder: 1
     instances:
       mocksCircuit:

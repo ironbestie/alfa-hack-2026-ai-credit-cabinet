@@ -34,7 +34,6 @@ class ApplicationDocumentService(
 
         val actor = accessService.currentUsername()
         if (application.status == ApplicationStatus.NEEDS_MORE_INFO) {
-            // По схеме кейса после дозапроса заявка возвращается менеджеру, а не перезапускает весь конвейер.
             ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.MANUAL_REVIEW)
             application.status = ApplicationStatus.MANUAL_REVIEW
             application.updatedAt = Instant.now()

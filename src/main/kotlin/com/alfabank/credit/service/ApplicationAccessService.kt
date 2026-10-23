@@ -17,10 +17,6 @@ class ApplicationAccessService {
         return authentication.authorities.any { it.authority == "ROLE_MANAGER" }
     }
 
-    /**
-     * Менеджер видит все заявки, клиент — только свои.
-     * ownerUsername == null — legacy-записи до появления владельца (бэкфилл делает DataLoader).
-     */
     fun checkAccess(application: Application) {
         if (isManager()) return
         val owner = application.ownerUsername ?: return

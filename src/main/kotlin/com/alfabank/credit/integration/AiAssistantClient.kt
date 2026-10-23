@@ -6,11 +6,6 @@ import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 
-/**
- * ИИ-шлюз с OpenAI-совместимым API.
- * Подходит и для Ollama (/v1/chat/completions), и для внешнего провайдера:
- * достаточно поменять base-url, api-key и model через переменные окружения.
- */
 @Service
 class AiAssistantClient(
     @Value("\${app.ai.base-url:http://localhost:11434}") baseUrl: String,
@@ -68,9 +63,6 @@ class AiAssistantClient(
         }
     }
 
-    /**
-     * Простая защита от галлюцинаций: все числа в ответе должны встречаться в фактах.
-     */
     private fun numbersAreGrounded(answer: String, facts: String): Boolean {
         val factNumbers = NUMBER_REGEX.findAll(facts)
             .map { it.value.replace(',', '.') }

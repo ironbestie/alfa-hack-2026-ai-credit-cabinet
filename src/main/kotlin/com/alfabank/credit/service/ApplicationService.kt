@@ -100,7 +100,6 @@ class ApplicationService(
         }
         accessService.checkAccess(application)
 
-        // По схеме кейса отправка сразу переводит заявку в ENRICHMENT, статус SUBMITTED не используем.
         ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.ENRICHMENT)
 
         val consents = consentRepository.findByApplicationId(applicationId)

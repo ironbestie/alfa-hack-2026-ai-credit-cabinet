@@ -31,7 +31,6 @@ class ApplicationProcessingListener(
         log.info("Начинаем обработку заявки: ${event.applicationId}")
         val application = applicationRepository.findById(event.applicationId).orElse(null) ?: return
 
-        // Старые заявки могли остаться в SUBMITTED. Новые сразу создаются в ENRICHMENT.
         if (application.status == ApplicationStatus.SUBMITTED) {
             transition(application, ApplicationStatus.ENRICHMENT, "ENRICHMENT", "Сбор данных", ApplicationEventType.DATA_ENRICHED)
         }
@@ -40,12 +39,9 @@ class ApplicationProcessingListener(
             return
         }
 
-        // ENRICHMENT: собираем данные из моков. БКИ вызывается только при наличии согласия.
         val enrichment = scoringService.enrich(application)
         saveEvent(application, ApplicationEventType.DATA_ENRICHED, "Данные из ЕГРЮЛ, ФНС, БКИ и банка собраны")
 
-        // Стоп-факторы проверяем до скоринга и до проверки полноты источников:
-        // ликвидация компании должна давать отказ, даже если БКИ/ФНС не ответили.
         scoringService.stopFactor(enrichment.input)?.let { reason ->
             application.rejectionReason = reason
             transition(
@@ -70,7 +66,6 @@ class ApplicationProcessingListener(
             return
         }
 
-        // SCORING
         transition(application, ApplicationStatus.SCORING, "SCORING", "Оценка риска", ApplicationEventType.STATUS_CHANGED)
         val result = scoringService.score(enrichment.input)
         application.riskScore = result.score
@@ -84,7 +79,6 @@ class ApplicationProcessingListener(
         )
         sseService.sendUpdate(application.id.toString(), "SCORING_COMPLETED", "Балл ${result.score}, грейд ${result.grade}")
 
-        // DECISION
         transition(application, ApplicationStatus.DECISION, "DECISION", "Принятие решения", ApplicationEventType.STATUS_CHANGED)
         val decisionOutcome = decisionService.makeDecision(
             application,

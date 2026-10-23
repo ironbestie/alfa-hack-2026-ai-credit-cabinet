@@ -9,7 +9,6 @@ import java.math.BigDecimal
 class PolicyProperties {
     var grades: Map<String, GradePolicy> = emptyMap()
 
-    /** Сумма выше этого порога всегда уходит на ручное рассмотрение. */
     var manualReviewOver: BigDecimal = BigDecimal("10000000")
 }
 

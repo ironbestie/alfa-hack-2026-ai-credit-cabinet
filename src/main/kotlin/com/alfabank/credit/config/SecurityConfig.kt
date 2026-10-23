@@ -43,8 +43,6 @@ class SecurityConfig {
         http
             .csrf { it.disable() }
             .cors { }
-            // Сессия нужна, чтобы браузерный EventSource мог подключиться к SSE после Basic-аутентификации:
-            // cookie JSESSIONID отправляется автоматически, в отличие от заголовка Authorization.
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
             .authorizeHttpRequests { auth ->
                 auth

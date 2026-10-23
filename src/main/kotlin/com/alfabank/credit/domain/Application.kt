@@ -19,7 +19,6 @@ enum class ApplicationStatus {
     FUNDED,
     CLOSED,
 
-    // Legacy-значения: оставлены, чтобы старые строки в БД читались без миграции.
     SUBMITTED,
     CANCELLED,
     EXPIRED

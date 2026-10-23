@@ -12,7 +12,6 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   minio:
-    # Зафиксированный digest вместо latest: образ не изменится между запусками.
     image: elestio/minio@sha256:e7ffdea1db8e1830237169cbc481d52604f68447ce35df8ed5062202c3e3dc29
     container_name: alfa_credit_s3
     restart: always
@@ -43,7 +42,6 @@ services:
       - ./mocks:/home/wiremock
     command: ["--verbose"]
 
-  # НАШЕ ПРИЛОЖЕНИЕ
   app:
     build: .
     container_name: alfa_credit_app

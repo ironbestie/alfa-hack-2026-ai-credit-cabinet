@@ -22,7 +22,7 @@ class S3Config(
             .endpointOverride(URI.create(endpoint))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
             .region(Region.of(region))
-            .forcePathStyle(true) // Важно для MinIO!
+            .forcePathStyle(true)
             .build()
     }
 }

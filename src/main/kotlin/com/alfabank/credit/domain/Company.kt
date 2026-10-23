@@ -37,7 +37,7 @@ class Company(
     val category: String,
 
     @Column(nullable = false)
-    val status: String, // "active"
+    val status: String,
 
     @Column(nullable = false)
     val annualRevenue: BigDecimal,

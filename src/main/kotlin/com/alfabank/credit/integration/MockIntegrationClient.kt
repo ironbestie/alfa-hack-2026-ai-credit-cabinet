@@ -94,10 +94,6 @@ class MockIntegrationClient(@Value("\${app.mocks.url}") baseUrl: String) {
         return restClient.get().uri("/fns/v1/companies/$inn/finance").retrieve().body(FnsResponse::class.java)
     }
 
-    /**
-     * БКИ — POST-запрос. По требованиям кейса повторяем только GET-запросы,
-     * поэтому здесь нет @Retry: ошибка сразу уходит в fallback и заявка идёт на ручную проверку.
-     */
     @CircuitBreaker(name = "mocksCircuit", fallbackMethod = "bkiFallback")
     fun getBki(inn: String, consentId: String): BkiResponse? {
         return restClient.post().uri("/bki/v1/reports")
@@ -111,7 +107,6 @@ class MockIntegrationClient(@Value("\${app.mocks.url}") baseUrl: String) {
         return restClient.get().uri("/bank/v1/clients/$inn").retrieve().body(BankResponse::class.java)
     }
 
-    // Fallback-методы (если мок упал)
     fun egrulFallback(inn: String, ex: Exception): EgrulResponse? = null
     fun fnsFallback(inn: String, ex: Exception): FnsResponse? = null
     fun bkiFallback(inn: String, consentId: String, ex: Exception): BkiResponse? = null

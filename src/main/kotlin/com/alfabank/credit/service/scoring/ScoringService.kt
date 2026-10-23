@@ -27,10 +27,6 @@ class ScoringService(
     private val teamScoringService: TeamScoringService,
     private val consentRepository: ConsentRepository
 ) {
-    /**
-     * Этап ENRICHMENT: собираем данные из ЕГРЮЛ, ФНС, БКИ и банка.
-     * БКИ вызывается только при наличии согласия — без него заявка уйдёт на ручную проверку.
-     */
     fun enrich(application: Application): EnrichmentPayload {
         val company = application.company
         val egrul = mockClient.getEgrul(company.inn)
@@ -72,7 +68,6 @@ class ScoringService(
 
     fun stopFactor(input: ScoringInput): String? = teamScoringService.stopFactor(input)
 
-    /** Оставлено для сценариев, где нужен полный расчёт одним вызовом. */
     fun calculateScore(application: Application): ScoringPayload {
         val enrichment = enrich(application)
         return ScoringPayload(enrichment.input, score(enrichment.input), enrichment.sourcesOk)

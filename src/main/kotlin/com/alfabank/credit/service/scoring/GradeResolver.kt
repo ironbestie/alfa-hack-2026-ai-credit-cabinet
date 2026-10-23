@@ -3,9 +3,6 @@ package com.alfabank.credit.scoring
 import com.alfabank.credit.config.ScorecardProperties
 import org.springframework.stereotype.Component
 
-/**
- * Единственный источник правды для грейдов: и скоринг, и экран решения используют YAML-конфиг.
- */
 @Component
 class GradeResolver(
     private val scorecard: ScorecardProperties

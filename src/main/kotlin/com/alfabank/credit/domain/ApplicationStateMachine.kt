@@ -4,12 +4,6 @@ import com.alfabank.credit.exception.InvalidStateTransitionException
 
 object ApplicationStateMachine {
 
-    /**
-     * Схема статусов из кейса:
-     * DRAFT -> ENRICHMENT -> SCORING -> DECISION -> APPROVED / COUNTER_OFFER / REJECTED / MANUAL_REVIEW.
-     *
-     * Legacy-статусы SUBMITTED, CANCELLED и EXPIRED оставлены только для чтения старых строк.
-     */
     private val allowedTransitions = mapOf(
         ApplicationStatus.DRAFT to setOf(ApplicationStatus.ENRICHMENT, ApplicationStatus.CLOSED),
         ApplicationStatus.SUBMITTED to setOf(ApplicationStatus.ENRICHMENT, ApplicationStatus.CLOSED),

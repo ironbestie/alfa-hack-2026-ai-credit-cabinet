@@ -47,7 +47,6 @@ class IdempotencyFilter(
             throw e
         }
 
-        // Ключ фиксируем только для успешных ответов, чтобы клиент мог повторить запрос после ошибки.
         if (response.status < 400) {
             redisTemplate.opsForValue().set(redisKey, "completed", 24, TimeUnit.HOURS)
         } else {
