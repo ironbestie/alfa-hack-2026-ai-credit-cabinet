@@ -2,6 +2,7 @@ package com.alfabank.credit.service
 
 import com.alfabank.credit.domain.*
 import com.alfabank.credit.dto.*
+import com.alfabank.credit.exception.NotFoundException
 import com.alfabank.credit.integration.AiAssistantClient
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
@@ -28,10 +29,10 @@ class ApplicationService(
     @Transactional
     fun createApplication(request: CreateApplicationRequest): ApplicationResponse {
         val company = companyRepository.findById(request.companyId).orElseThrow {
-            IllegalArgumentException("Company not found")
+            NotFoundException("Company not found")
         }
         val product = productRepository.findById(request.productId).orElseThrow {
-            IllegalArgumentException("Product not found")
+            NotFoundException("Product not found")
         }
         if (request.requestedAmount < product.minAmount || request.requestedAmount > product.maxAmount) {
             throw IllegalArgumentException("Amount must be between ${product.minAmount} and ${product.maxAmount}")
@@ -42,6 +43,7 @@ class ApplicationService(
             product = product,
             requestedAmount = request.requestedAmount,
             requestedTermMonths = request.requestedTermMonths,
+            purpose = request.purpose,
             status = ApplicationStatus.DRAFT
         )
 
@@ -53,7 +55,7 @@ class ApplicationService(
     @Transactional
     fun signConsents(applicationId: UUID) {
         val application = applicationRepository.findById(applicationId).orElseThrow {
-            IllegalArgumentException("Application not found")
+            NotFoundException("Application not found")
         }
         val existing = consentRepository.findByApplicationId(applicationId)
         if (existing.none { it.consentType == "BKI" }) {
@@ -67,7 +69,7 @@ class ApplicationService(
     @Transactional
     fun submitApplication(applicationId: UUID) {
         val application = applicationRepository.findById(applicationId).orElseThrow {
-            IllegalArgumentException("Application not found")
+            NotFoundException("Application not found")
         }
 
         ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SUBMITTED)
@@ -95,7 +97,7 @@ class ApplicationService(
     @Transactional(readOnly = true)
     fun getApplicationById(id: UUID): ApplicationResponse {
         val application = applicationRepository.findById(id).orElseThrow {
-            IllegalArgumentException("Application not found")
+            NotFoundException("Application not found")
         }
         return mapToResponse(application)
     }
@@ -117,7 +119,7 @@ class ApplicationService(
     @Transactional(readOnly = true)
     fun getExplanation(applicationId: UUID): ExplanationResponse {
         val application = applicationRepository.findById(applicationId).orElseThrow {
-            IllegalArgumentException("Application not found")
+            NotFoundException("Application not found")
         }
 
         val reasons = mutableListOf<String>()
@@ -152,8 +154,8 @@ class ApplicationService(
 
     @Transactional(readOnly = true)
     fun getPreapprovedOffer(inn: String): PreapprovedOfferResponse {
-        val company = companyRepository.findAll().find { it.inn == inn }
-            ?: throw IllegalArgumentException("Company not found")
+        val company = companyRepository.findByInn(inn)
+            ?: throw NotFoundException("Company not found")
 
         val maxAmount = company.annualRevenue.divide(BigDecimal("4")).min(BigDecimal("30000000"))
 
@@ -170,7 +172,7 @@ class ApplicationService(
     @Transactional(readOnly = true)
     fun getScore(applicationId: UUID): ScoreResponse {
         val application = applicationRepository.findById(applicationId).orElseThrow {
-            IllegalArgumentException("Application not found")
+            NotFoundException("Application not found")
         }
 
         if (application.riskScore == null) {

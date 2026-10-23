@@ -9,7 +9,11 @@ import org.springframework.stereotype.Service
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-data class ScoringPayload(val input: ScoringInput, val result: TeamScoringResult)
+data class ScoringPayload(
+    val input: ScoringInput,
+    val result: TeamScoringResult,
+    val sourcesOk: Boolean = true
+)
 
 @Service
 class ScoringService(
@@ -41,6 +45,7 @@ class ScoringService(
         )
 
         val result = teamScoringService.score(input) // <-- Вызов
-        return ScoringPayload(input, result)
+        val sourcesOk = egrul != null && fns != null && bki != null
+        return ScoringPayload(input, result, sourcesOk)
     }
 }

@@ -7,5 +7,6 @@ data class CreateApplicationRequest(
     val companyId: UUID,
     val productId: UUID,
     val requestedAmount: BigDecimal,
-    val requestedTermMonths: Int
+    val requestedTermMonths: Int,
+    val purpose: String? = null
 )

@@ -12,7 +12,8 @@ class DecisionService(
     fun makeDecision(application: Application, payload: ScoringPayload): DecisionOutcome {
         return teamScoringService.decide( // <-- Вызов
             input = payload.input,
-            productRatePercent = application.product.baseRate.toBigDecimal()
+            productRatePercent = application.product.baseRate.toBigDecimal(),
+            sourcesOk = payload.sourcesOk
         )
     }
 }

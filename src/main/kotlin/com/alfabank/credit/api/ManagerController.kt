@@ -5,7 +5,6 @@ import com.alfabank.credit.service.ApplicationService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.util.UUID
@@ -26,27 +25,26 @@ class ManagerController(
 ) {
     @Operation(summary = "Очередь заявок на ручное рассмотрение", description = "Возвращает заявки в статусе MANUAL_REVIEW.")
     @GetMapping("/applications/pending")
-    fun getPendingApplications(): ResponseEntity<Any> {
-        return ResponseEntity.ok(applicationService.getPendingApplicationsForManager())
+    fun getPendingApplications(): List<Map<String, Any?>> {
+        return applicationService.getPendingApplicationsForManager()
     }
 
-    @Operation(summary = "Вынести решение по заявке", description = "Менеджер может одобрить, сделать контрпредложение, запросить документы или отказать.")
+    @Operation(
+        summary = "Вынести решение по заявке",
+        description = "Менеджер может одобрить (APPROVE), сделать контрпредложение (COUNTER_OFFER), запросить документы (REQUEST_DOCS) или отказать (REJECT)."
+    )
     @PostMapping("/applications/{id}/decision")
     fun makeDecision(
         @Parameter(description = "UUID заявки") @PathVariable id: UUID,
         @RequestBody request: ManagerDecisionRequest
-    ): ResponseEntity<Any> {
-        return try {
-            decisionService.processManagerDecision(
-                applicationId = id,
-                decisionType = request.decisionType,
-                approvedAmount = request.approvedAmount,
-                approvedTermMonths = request.approvedTermMonths,
-                comment = request.comment
-            )
-            ResponseEntity.ok(mapOf("message" to "Decision processed"))
-        } catch (e: Exception) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+    ): Map<String, String> {
+        decisionService.processManagerDecision(
+            applicationId = id,
+            decisionType = request.decisionType,
+            approvedAmount = request.approvedAmount,
+            approvedTermMonths = request.approvedTermMonths,
+            comment = request.comment
+        )
+        return mapOf("message" to "Decision processed")
     }
 }

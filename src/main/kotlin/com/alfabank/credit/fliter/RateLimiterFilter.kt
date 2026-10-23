@@ -5,6 +5,7 @@ import io.github.bucket4j.Bucket
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
@@ -12,15 +13,18 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 @Component
-class RateLimitFilter : OncePerRequestFilter() {
+class RateLimitFilter(
+    @Value("\${app.rate-limit.capacity:60}") private val capacity: Long,
+    @Value("\${app.rate-limit.refill-per-minute:60}") private val refillPerMinute: Long
+) : OncePerRequestFilter() {
 
     private val cache = ConcurrentHashMap<String, Bucket>()
 
     private fun resolveBucket(ip: String): Bucket {
         return cache.computeIfAbsent(ip) {
             val limit = Bandwidth.builder()
-                .capacity(10)
-                .refillGreedy(10, Duration.ofMinutes(1))
+                .capacity(capacity)
+                .refillGreedy(refillPerMinute, Duration.ofMinutes(1))
                 .build()
 
             Bucket.builder().addLimit(limit).build()

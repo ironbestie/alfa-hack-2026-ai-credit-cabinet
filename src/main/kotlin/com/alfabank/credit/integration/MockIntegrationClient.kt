@@ -13,7 +13,13 @@ data class BkiResponse(val totalDebt: BigDecimal, val maxOverdueDays24m: Int, va
 
 @Service
 class MockIntegrationClient(@Value("\${app.mocks.url}") baseUrl: String) {
-    private val restClient = RestClient.create(baseUrl)
+    private val restClient = RestClient.builder()
+        .baseUrl(baseUrl)
+        .requestFactory(org.springframework.http.client.SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(2000)
+            setReadTimeout(3000)
+        })
+        .build()
 
     @Retry(name = "mocksRetry")
     @CircuitBreaker(name = "mocksCircuit", fallbackMethod = "egrulFallback")

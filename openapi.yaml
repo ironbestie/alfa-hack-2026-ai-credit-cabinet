@@ -14,6 +14,10 @@ tags:
     description: Кабинет кредитного менеджера (Андеррайтера)
   - name: Offers
     description: Контрпредложения (H2)
+  - name: Companies
+    description: Справочник компаний и ЕГРЮЛ
+  - name: Products
+    description: Справочник кредитных продуктов
   - name: Quiz
     description: Квиз-подбор продуктов (H5)
   - name: Auth
@@ -27,11 +31,11 @@ paths:
     post:
       tags: [Applications]
       summary: Создать черновик заявки
-      description: Создает заявку в статусе DRAFT. Требует Idempotency-Key в заголовках.
+      description: Создает заявку в статусе DRAFT. Опционально поддерживает Idempotency-Key.
       parameters:
         - name: Idempotency-Key
           in: header
-          required: true
+          required: false
           schema:
             type: string
             example: "req-12345-unique"
@@ -50,6 +54,21 @@ paths:
                 $ref: '#/components/schemas/ApplicationResponse'
         '400':
           description: Неверные данные (например, сумма вне лимитов продукта)
+        '404':
+          description: Компания или продукт не найдены
+    get:
+      tags: [Applications]
+      summary: Получить все заявки
+      description: Возвращает список всех заявок (в MVP без фильтрации и пагинации).
+      responses:
+        '200':
+          description: Список заявок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
 
   /api/applications/{id}:
     get:
@@ -172,21 +191,28 @@ paths:
     post:
       tags: [Applications]
       summary: Подписать документы и получить деньги
-      description: Переводит заявку в финальный статус FUNDED. Требует код из SMS (демо 1234).
+      description: Переводит заявку из SIGNING в финальный статус FUNDED (имитация выдачи).
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                code:
-                  type: string
-                  example: "1234"
       responses:
         '200':
           description: Кредит выдан
+
+  /api/applications/{id}/score:
+    get:
+      tags: [Applications]
+      summary: Получить балл, грейд и факторы скоринга
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Результат скоринга
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreResponse'
+        '409':
+          description: Скоринг ещё не выполнен
 
   /api/applications/{id}/explanation:
     get:
@@ -266,6 +292,45 @@ paths:
                 $ref: '#/components/schemas/PreapprovedOfferResponse'
 
   # ==========================================
+  # СПРАВОЧНИКИ
+  # ==========================================
+  /api/companies:
+    get:
+      tags: [Companies]
+      summary: Список компаний
+      description: Компании, загруженные в систему. Используется для получения companyId.
+      responses:
+        '200':
+          description: Список компаний
+
+  /api/companies/lookup:
+    get:
+      tags: [Companies]
+      summary: Карточка компании по ИНН
+      description: Сначала ищет компанию в БД, затем обращается в ЕГРЮЛ.
+      parameters:
+        - name: inn
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "7704983159"
+      responses:
+        '200':
+          description: Данные компании
+        '404':
+          description: Компания не найдена
+
+  /api/products:
+    get:
+      tags: [Products]
+      summary: Список кредитных продуктов
+      description: Доступные продукты. Используется для получения productId.
+      responses:
+        '200':
+          description: Список продуктов
+
+  # ==========================================
   # МЕНЕДЖЕРСКИЕ ЭНДПОИНТЫ
   # ==========================================
   /api/manager/applications/pending:
@@ -339,6 +404,11 @@ components:
         requestedTermMonths:
           type: integer
           example: 24
+        purpose:
+          type: string
+          nullable: true
+          description: Цель кредита, выбранная в квизе
+          example: "ОБОРУДОВАНИЕ"
 
     ApplicationResponse:
       type: object
@@ -348,7 +418,7 @@ components:
           format: uuid
         status:
           type: string
-          enum: [DRAFT, ENRICHMENT, SCORING, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CANCELLED, EXPIRED]
+          enum: [DRAFT, SUBMITTED, ENRICHMENT, SCORING, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CANCELLED, EXPIRED]
         requestedAmount:
           type: number
         requestedTermMonths:
@@ -381,6 +451,32 @@ components:
         type:
           type: string
           enum: [REQUESTED, LIMIT, GUARANTEE, COLLATERAL]
+
+    ScoreResponse:
+      type: object
+      properties:
+        score:
+          type: integer
+        grade:
+          type: string
+          enum: [A, B, C, D]
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+        factors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreFactor'
+
+    ScoreFactor:
+      type: object
+      properties:
+        name:
+          type: string
+        contribution:
+          type: integer
+        description:
+          type: string
 
     ExplanationResponse:
       type: object
