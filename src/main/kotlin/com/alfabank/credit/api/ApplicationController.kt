@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
@@ -113,10 +114,10 @@ class ApplicationController(
         summary = "Загрузить документ",
         description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов). Возвращает заявку в очередь менеджера."
     )
-    @PostMapping("/{id}/documents")
+    @PostMapping("/{id}/documents", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun uploadDocument(
         @Parameter(description = "UUID заявки") @PathVariable id: UUID,
-        @Parameter(description = "Файл документа") @RequestParam("file") file: MultipartFile
+        @Parameter(description = "Файл документа") @RequestPart("file") file: MultipartFile
     ): Map<String, String> {
         documentService.uploadDocument(id, file)
         return mapOf("message" to "Document uploaded")

@@ -14,6 +14,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.multipart.MaxUploadSizeExceededException
+import org.springframework.web.multipart.MultipartException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
 data class ApiError(
@@ -60,6 +62,14 @@ class GlobalExceptionHandler {
             "Не передан обязательный параметр: ${ex.parameterName}",
             "BAD_REQUEST"
         )
+
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun handleMaxUploadSize(ex: MaxUploadSizeExceededException): ResponseEntity<ApiError> =
+        response(HttpStatus.BAD_REQUEST, "Размер файла превышает допустимый лимит", "FILE_TOO_LARGE")
+
+    @ExceptionHandler(MultipartException::class)
+    fun handleMultipart(ex: MultipartException): ResponseEntity<ApiError> =
+        response(HttpStatus.BAD_REQUEST, "Запрос должен быть multipart/form-data", "INVALID_MULTIPART")
 
     @ExceptionHandler(MethodArgumentTypeMismatchException::class)
     fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ApiError> =
