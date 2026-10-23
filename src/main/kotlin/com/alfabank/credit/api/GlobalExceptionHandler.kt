@@ -2,6 +2,7 @@ package com.alfabank.credit.api
 
 import com.alfabank.credit.exception.InvalidStateTransitionException
 import com.alfabank.credit.exception.NotFoundException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -36,5 +37,12 @@ class GlobalExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(mapOf("error" to (ex.message ?: "Некорректный запрос")))
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun handleOptimisticLock(ex: OptimisticLockingFailureException): ResponseEntity<Map<String, String>> {
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(mapOf("error" to "Заявка уже изменена другим пользователем. Обновите данные и повторите."))
     }
 }

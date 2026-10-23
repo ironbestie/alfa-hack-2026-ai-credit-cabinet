@@ -1,11 +1,14 @@
 package com.alfabank.credit.api
 
 import com.alfabank.credit.domain.Company
+import com.alfabank.credit.dto.PageResponse
 import com.alfabank.credit.integration.EgrulClient
 import com.alfabank.credit.integration.EgrulData
 import com.alfabank.credit.repository.CompanyRepository
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.data.domain.Sort
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -18,8 +21,12 @@ class CompanyController(
 ) {
     @Operation(summary = "Список компаний", description = "Возвращает компании, загруженные в систему (нужно для получения companyId).")
     @GetMapping
-    fun listCompanies(): List<Company> {
-        return companyRepository.findAll()
+    fun listCompanies(
+        @Parameter(description = "Номер страницы (с 0)") @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Размер страницы (1-100)") @RequestParam(defaultValue = "20") size: Int
+    ): PageResponse<Company> {
+        val pageable = PageResponse.pageable(page, size, Sort.by(Sort.Direction.ASC, "name"))
+        return PageResponse.from(companyRepository.findAll(pageable))
     }
 
     @Operation(summary = "Карточка компании по ИНН", description = "Сначала ищет компанию в БД, затем обращается в ЕГРЮЛ.")

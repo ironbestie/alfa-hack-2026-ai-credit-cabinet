@@ -1,8 +1,10 @@
 package com.alfabank.credit.service
 
+import com.alfabank.credit.domain.Application
 import com.alfabank.credit.domain.ApplicationEventType
 import com.alfabank.credit.domain.ApplicationStateMachine
 import com.alfabank.credit.domain.ApplicationStatus
+import com.alfabank.credit.domain.Offer
 import com.alfabank.credit.dto.OfferResponse
 import com.alfabank.credit.exception.NotFoundException
 import com.alfabank.credit.repository.ApplicationRepository
@@ -17,12 +19,14 @@ import java.util.UUID
 class ApplicationDecisionService(
     private val applicationRepository: ApplicationRepository,
     private val offerRepository: OfferRepository,
-    private val eventService: ApplicationEventService
+    private val eventService: ApplicationEventService,
+    private val accessService: ApplicationAccessService
 ) {
     @Transactional
     fun acceptOffer(applicationId: UUID, offerId: UUID? = null) {
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
+        accessService.checkAccess(application)
         ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SIGNING)
 
         val offers = offerRepository.findByApplicationId(applicationId)
@@ -42,24 +46,36 @@ class ApplicationDecisionService(
         applicationRepository.save(application)
 
         val description = selectedOffer?.let { "Клиент принял предложение ${it.type}" } ?: "Клиент принял предложение"
-        eventService.saveEvent(application, ApplicationEventType.STATUS_CHANGED, description)
+        eventService.saveEvent(
+            application,
+            ApplicationEventType.STATUS_CHANGED,
+            description,
+            accessService.currentUsername()
+        )
     }
 
     @Transactional
     fun signOffer(applicationId: UUID) {
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
+        accessService.checkAccess(application)
         ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.FUNDED)
         application.status = ApplicationStatus.FUNDED
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
-        eventService.saveEvent(application, ApplicationEventType.STATUS_CHANGED, "Кредит выдан")
+        eventService.saveEvent(
+            application,
+            ApplicationEventType.STATUS_CHANGED,
+            "Кредит выдан",
+            accessService.currentUsername()
+        )
     }
 
     @Transactional(readOnly = true)
     fun getOffers(applicationId: UUID): List<OfferResponse> {
-        applicationRepository.findById(applicationId)
+        val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
+        accessService.checkAccess(application)
 
         return offerRepository.findByApplicationId(applicationId).map {
             OfferResponse(
@@ -83,18 +99,28 @@ class ApplicationDecisionService(
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
 
+        var offerType: String? = null
+        var offerAmount: BigDecimal? = null
+        var offerTerm: Int? = null
+
         when (decisionType.uppercase()) {
             "APPROVE" -> {
                 ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.APPROVED)
                 application.status = ApplicationStatus.APPROVED
                 application.approvedAmount = approvedAmount ?: application.requestedAmount
                 application.approvedTermMonths = approvedTermMonths ?: application.requestedTermMonths
+                offerType = "REQUESTED"
+                offerAmount = application.approvedAmount
+                offerTerm = application.approvedTermMonths
             }
             "COUNTER_OFFER" -> {
                 ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.COUNTER_OFFER)
                 application.status = ApplicationStatus.COUNTER_OFFER
                 application.approvedAmount = approvedAmount ?: application.requestedAmount
                 application.approvedTermMonths = approvedTermMonths ?: application.requestedTermMonths
+                offerType = "LIMIT"
+                offerAmount = application.approvedAmount
+                offerTerm = application.approvedTermMonths
             }
             "REQUEST_DOCS" -> {
                 ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.NEEDS_MORE_INFO)
@@ -112,6 +138,28 @@ class ApplicationDecisionService(
 
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
-        eventService.saveEvent(application, ApplicationEventType.DECISION_MADE, "Менеджер: ${decisionType.uppercase()}")
+
+        if (offerType != null && offerAmount != null && offerTerm != null) {
+            saveOffer(application, offerType, offerAmount, offerTerm)
+        }
+
+        eventService.saveEvent(
+            application,
+            ApplicationEventType.DECISION_MADE,
+            "Менеджер: ${decisionType.uppercase()}. $comment",
+            accessService.currentUsername()
+        )
+    }
+
+    private fun saveOffer(application: Application, type: String, amount: BigDecimal, termMonths: Int) {
+        offerRepository.save(
+            Offer(
+                application = application,
+                amount = amount,
+                termMonths = termMonths,
+                interestRate = application.product.baseRate,
+                type = type
+            )
+        )
     }
 }

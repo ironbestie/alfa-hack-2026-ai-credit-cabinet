@@ -1,5 +1,6 @@
 package com.alfabank.credit.api
 
+import com.alfabank.credit.dto.PageResponse
 import com.alfabank.credit.service.ApplicationDecisionService
 import com.alfabank.credit.service.ApplicationService
 import io.swagger.v3.oas.annotations.Operation
@@ -23,10 +24,13 @@ class ManagerController(
     private val applicationService: ApplicationService,
     private val decisionService: ApplicationDecisionService
 ) {
-    @Operation(summary = "Очередь заявок на ручное рассмотрение", description = "Возвращает заявки в статусе MANUAL_REVIEW.")
+    @Operation(summary = "Очередь заявок на ручное рассмотрение", description = "Возвращает заявки в статусе MANUAL_REVIEW с пагинацией.")
     @GetMapping("/applications/pending")
-    fun getPendingApplications(): List<Map<String, Any?>> {
-        return applicationService.getPendingApplicationsForManager()
+    fun getPendingApplications(
+        @Parameter(description = "Номер страницы (с 0)") @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Размер страницы (1-100)") @RequestParam(defaultValue = "20") size: Int
+    ): PageResponse<Map<String, Any?>> {
+        return applicationService.getPendingApplicationsForManager(page, size)
     }
 
     @Operation(

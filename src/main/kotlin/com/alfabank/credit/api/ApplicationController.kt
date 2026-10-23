@@ -5,6 +5,7 @@ import com.alfabank.credit.dto.CreateApplicationRequest
 import com.alfabank.credit.dto.EventResponse
 import com.alfabank.credit.dto.ExplanationResponse
 import com.alfabank.credit.dto.OfferResponse
+import com.alfabank.credit.dto.PageResponse
 import com.alfabank.credit.dto.ScoreResponse
 import com.alfabank.credit.service.ApplicationDecisionService
 import com.alfabank.credit.service.ApplicationDocumentService
@@ -50,10 +51,13 @@ class ApplicationController(
         return applicationService.createApplication(request)
     }
 
-    @Operation(summary = "Получить все заявки", description = "Возвращает список всех заявок (в MVP без фильтрации).")
+    @Operation(summary = "Получить все заявки", description = "Возвращает заявки с пагинацией: клиент видит только свои, менеджер — все.")
     @GetMapping
-    fun listApplications(): List<ApplicationResponse> {
-        return applicationService.getAllApplications()
+    fun listApplications(
+        @Parameter(description = "Номер страницы (с 0)") @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Размер страницы (1-100)") @RequestParam(defaultValue = "20") size: Int
+    ): PageResponse<ApplicationResponse> {
+        return applicationService.getAllApplications(page, size)
     }
 
     @Operation(summary = "Получить карточку заявки", description = "Возвращает полную информацию о заявке, включая балл и причины.")
@@ -86,12 +90,14 @@ class ApplicationController(
         return mapOf("message" to "Application submitted successfully")
     }
 
-    @Operation(summary = "Получить историю событий (Таймлайн)", description = "Возвращает ленту событий для трекера клиента.")
+    @Operation(summary = "Получить историю событий (Таймлайн)", description = "Возвращает ленту событий для трекера клиента с пагинацией.")
     @GetMapping("/{id}/timeline")
     fun getTimeline(
-        @Parameter(description = "UUID заявки") @PathVariable id: UUID
-    ): List<EventResponse> {
-        return eventService.getApplicationTimeline(id)
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID,
+        @Parameter(description = "Номер страницы (с 0)") @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Размер страницы (1-100)") @RequestParam(defaultValue = "20") size: Int
+    ): PageResponse<EventResponse> {
+        return eventService.getApplicationTimeline(id, page, size)
     }
 
     @Operation(summary = "SSE-поток статусов", description = "Server-Sent Events для живого трекера без перезагрузки страницы.")
@@ -99,6 +105,7 @@ class ApplicationController(
     fun streamApplicationStatus(
         @Parameter(description = "UUID заявки") @PathVariable id: UUID
     ): SseEmitter {
+        applicationService.checkAccess(id)
         return sseService.subscribe(id.toString())
     }
 

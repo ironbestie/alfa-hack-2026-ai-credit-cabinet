@@ -44,9 +44,15 @@ class Application(
 
     val purpose: String? = null,
 
+    @Column(name = "owner_username")
+    var ownerUsername: String? = null,
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     var status: ApplicationStatus = ApplicationStatus.DRAFT,
+
+    @Version
+    var version: Long? = null,
 
     var riskScore: Int? = null,
     var scoringDetails: String? = null,

@@ -57,7 +57,8 @@ data class DecisionOutcome(
 @Component
 class TeamScoringService(
     private val scorecard: ScorecardProperties,
-    private val policy: PolicyProperties
+    private val policy: PolicyProperties,
+    private val gradeResolver: GradeResolver
 ) {
     companion object {
         private val HIGH_RISK_OKVED = listOf("56.", "41.", "42.", "43.")
@@ -124,12 +125,10 @@ class TeamScoringService(
         val rawScore = scorecard.base.baseValue + scorecard.base.multiplier * f.sumOf { it.points }
         val score = rawScore.coerceIn(0, 1000)
 
-        // ИСПОЛЬЗУЕМ YAML ДЛЯ ГРЕЙДОВ
-        val grade = scorecard.grades.entries
-            .sortedByDescending { it.value }
-            .firstOrNull { score >= it.value }?.key ?: "D"
+        // ИСПОЛЬЗУЕМ YAML ДЛЯ ГРЕЙДОВ (единый resolver с экраном решения)
+        val grade = gradeResolver.gradeFor(score)
 
-        val risk = when (grade) { "A" -> "low"; "D" -> "high"; else -> "medium" }
+        val risk = gradeResolver.riskLevel(grade)
 
         val finalFactors = f.map { it.copy(contribution = it.points * scorecard.base.multiplier) }
 

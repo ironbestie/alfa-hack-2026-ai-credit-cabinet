@@ -22,16 +22,19 @@ class ApplicationDocumentService(
     private val documentRepository: DocumentRepository,
     private val documentStorage: DocumentStorage,
     private val eventService: ApplicationEventService,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val accessService: ApplicationAccessService
 ) {
     @Transactional
     fun uploadDocument(applicationId: UUID, file: MultipartFile) {
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
+        accessService.checkAccess(application)
 
         val fileName = documentStorage.store(file, applicationId.toString())
         documentRepository.save(Document(application = application, fileName = fileName))
 
+        val actor = accessService.currentUsername()
         if (application.status == ApplicationStatus.NEEDS_MORE_INFO) {
             // Возвращаем заявку в работу и перезапускаем конвейер, иначе она зависнет в SCORING.
             ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SUBMITTED)
@@ -41,14 +44,16 @@ class ApplicationDocumentService(
             eventService.saveEvent(
                 application,
                 ApplicationEventType.DOCUMENT_UPLOADED,
-                "Документ загружен, заявка возвращена в работу"
+                "Документ загружен, заявка возвращена в работу",
+                actor
             )
             eventPublisher.publishEvent(ApplicationSubmittedEvent(applicationId))
         } else {
             eventService.saveEvent(
                 application,
                 ApplicationEventType.DOCUMENT_UPLOADED,
-                "Загружен документ: $fileName"
+                "Загружен документ: $fileName",
+                actor
             )
         }
     }

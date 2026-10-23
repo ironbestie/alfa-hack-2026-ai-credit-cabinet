@@ -3,12 +3,14 @@ package com.alfabank.credit.config
 import com.alfabank.credit.domain.Company
 import com.alfabank.credit.domain.CreditProduct
 import com.alfabank.credit.domain.Manager
+import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.CreditProductRepository
 import com.alfabank.credit.repository.ManagerRepository
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -16,15 +18,19 @@ import java.time.LocalDate
 class DataLoader(
     private val companyRepository: CompanyRepository,
     private val productRepository: CreditProductRepository,
-    private val managerRepository: ManagerRepository
+    private val managerRepository: ManagerRepository,
+    private val applicationRepository: ApplicationRepository
 ) : CommandLineRunner {
 
     private val log = LoggerFactory.getLogger(DataLoader::class.java)
 
+    @Transactional
     override fun run(vararg args: String?) {
         seedCompanies()
         seedProducts()
         seedManagers()
+        applicationRepository.backfillVersions()
+        backfillApplicationOwners()
     }
 
     /**
@@ -108,5 +114,19 @@ class DataLoader(
             Manager(name = "Анна К.", role = "credit_analyst"),
             Manager(name = "Сергей М.", role = "senior_analyst")
         ))
+    }
+
+    /**
+     * У старых заявок нет владельца — назначаем демо-клиента, чтобы не ломать доступ после
+     * включения проверки ownerUsername.
+     */
+    private fun backfillApplicationOwners() {
+        val orphaned = applicationRepository.findAll().filter { it.ownerUsername == null }
+        if (orphaned.isEmpty()) return
+        orphaned.forEach {
+            it.ownerUsername = "client"
+            applicationRepository.save(it)
+        }
+        log.info("Backfilled owner for {} applications", orphaned.size)
     }
 }

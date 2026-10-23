@@ -8,7 +8,9 @@ import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.ConsentRepository
 import com.alfabank.credit.repository.CreditProductRepository
+import com.alfabank.credit.scoring.GradeResolver
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -24,7 +26,9 @@ class ApplicationService(
     private val eventPublisher: ApplicationEventPublisher,
     private val eventService: ApplicationEventService,
     private val aiAssistantClient: AiAssistantClient,
-    private val sseService: SseService
+    private val sseService: SseService,
+    private val accessService: ApplicationAccessService,
+    private val gradeResolver: GradeResolver
 ) {
     @Transactional
     fun createApplication(request: CreateApplicationRequest): ApplicationResponse {
@@ -37,18 +41,23 @@ class ApplicationService(
         if (request.requestedAmount < product.minAmount || request.requestedAmount > product.maxAmount) {
             throw IllegalArgumentException("Amount must be between ${product.minAmount} and ${product.maxAmount}")
         }
+        if (request.requestedTermMonths < product.minTerm || request.requestedTermMonths > product.maxTerm) {
+            throw IllegalArgumentException("Term must be between ${product.minTerm} and ${product.maxTerm} months")
+        }
 
+        val owner = accessService.currentUsername()
         val application = Application(
             company = company,
             product = product,
             requestedAmount = request.requestedAmount,
             requestedTermMonths = request.requestedTermMonths,
             purpose = request.purpose,
+            ownerUsername = owner,
             status = ApplicationStatus.DRAFT
         )
 
         val saved = applicationRepository.save(application)
-        eventService.saveEvent(saved, ApplicationEventType.APPLICATION_CREATED, "Заявка создана")
+        eventService.saveEvent(saved, ApplicationEventType.APPLICATION_CREATED, "Заявка создана", owner)
         return mapToResponse(saved)
     }
 
@@ -57,12 +66,25 @@ class ApplicationService(
         val application = applicationRepository.findById(applicationId).orElseThrow {
             NotFoundException("Application not found")
         }
+        accessService.checkAccess(application)
+
         val existing = consentRepository.findByApplicationId(applicationId)
+        var added = false
         if (existing.none { it.consentType == "BKI" }) {
             consentRepository.save(Consent(application = application, consentType = "BKI"))
+            added = true
         }
         if (existing.none { it.consentType == "PD" }) {
             consentRepository.save(Consent(application = application, consentType = "PD"))
+            added = true
+        }
+        if (added) {
+            eventService.saveEvent(
+                application,
+                ApplicationEventType.CONSENT_SIGNED,
+                "Подписаны согласия БКИ и ПДн",
+                accessService.currentUsername()
+            )
         }
     }
 
@@ -71,6 +93,7 @@ class ApplicationService(
         val application = applicationRepository.findById(applicationId).orElseThrow {
             NotFoundException("Application not found")
         }
+        accessService.checkAccess(application)
 
         ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SUBMITTED)
 
@@ -84,14 +107,25 @@ class ApplicationService(
         applicationRepository.save(application)
 
         sseService.sendUpdate(applicationId.toString(), "SUBMITTED", "Заявка отправлена")
-        eventService.saveEvent(application, ApplicationEventType.STATUS_CHANGED, "Заявка отправлена на рассмотрение")
+        eventService.saveEvent(
+            application,
+            ApplicationEventType.STATUS_CHANGED,
+            "Заявка отправлена на рассмотрение",
+            accessService.currentUsername()
+        )
 
         eventPublisher.publishEvent(ApplicationSubmittedEvent(applicationId))
     }
 
     @Transactional(readOnly = true)
-    fun getAllApplications(): List<ApplicationResponse> {
-        return applicationRepository.findAll().map { mapToResponse(it) }
+    fun getAllApplications(page: Int, size: Int): PageResponse<ApplicationResponse> {
+        val pageable = PageResponse.pageable(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+        val applications = if (accessService.isManager()) {
+            applicationRepository.findAll(pageable)
+        } else {
+            applicationRepository.findByOwnerUsername(accessService.currentUsername(), pageable)
+        }
+        return PageResponse.from(applications.map { mapToResponse(it) })
     }
 
     @Transactional(readOnly = true)
@@ -99,21 +133,30 @@ class ApplicationService(
         val application = applicationRepository.findById(id).orElseThrow {
             NotFoundException("Application not found")
         }
+        accessService.checkAccess(application)
         return mapToResponse(application)
     }
 
     @Transactional(readOnly = true)
-    fun getPendingApplicationsForManager(): List<Map<String, Any?>> {
-        return applicationRepository.findAll()
-            .filter { it.status == ApplicationStatus.MANUAL_REVIEW }
-            .map {
-                mapOf(
-                    "id" to it.id,
-                    "amount" to it.requestedAmount,
-                    "score" to it.riskScore,
-                    "reason" to it.scoringDetails
-                )
-            }
+    fun checkAccess(applicationId: UUID) {
+        val application = applicationRepository.findById(applicationId).orElseThrow {
+            NotFoundException("Application not found")
+        }
+        accessService.checkAccess(application)
+    }
+
+    @Transactional(readOnly = true)
+    fun getPendingApplicationsForManager(page: Int, size: Int): PageResponse<Map<String, Any?>> {
+        val pageable = PageResponse.pageable(page, size, Sort.by(Sort.Direction.ASC, "updatedAt"))
+        val applications = applicationRepository.findByStatus(ApplicationStatus.MANUAL_REVIEW, pageable)
+        return PageResponse.from(applications.map {
+            mapOf(
+                "id" to it.id,
+                "amount" to it.requestedAmount,
+                "score" to it.riskScore,
+                "reason" to it.scoringDetails
+            )
+        })
     }
 
     @Transactional(readOnly = true)
@@ -121,6 +164,7 @@ class ApplicationService(
         val application = applicationRepository.findById(applicationId).orElseThrow {
             NotFoundException("Application not found")
         }
+        accessService.checkAccess(application)
 
         val reasons = mutableListOf<String>()
         val nextSteps = mutableListOf<String>()
@@ -168,12 +212,12 @@ class ApplicationService(
         )
     }
 
-    // НОВЫЙ МЕТОД ДЛЯ ЭКРАНА РЕШЕНИЯ
     @Transactional(readOnly = true)
     fun getScore(applicationId: UUID): ScoreResponse {
         val application = applicationRepository.findById(applicationId).orElseThrow {
             NotFoundException("Application not found")
         }
+        accessService.checkAccess(application)
 
         if (application.riskScore == null) {
             throw IllegalStateException("Скоринг для этой заявки еще не выполнен")
@@ -194,17 +238,12 @@ class ApplicationService(
             }
         }
 
-        val grade = when {
-            application.riskScore!! >= 700 -> "A"
-            application.riskScore!! >= 600 -> "B"
-            application.riskScore!! >= 500 -> "C"
-            else -> "D"
-        }
+        val grade = gradeResolver.gradeFor(application.riskScore!!)
 
         return ScoreResponse(
             score = application.riskScore!!,
             grade = grade,
-            riskLevel = if (grade == "A") "low" else if (grade == "D") "high" else "medium",
+            riskLevel = gradeResolver.riskLevel(grade),
             factors = factors
         )
     }
