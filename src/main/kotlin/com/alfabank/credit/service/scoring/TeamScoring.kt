@@ -1,6 +1,5 @@
 package com.alfabank.credit.scoring
 
-import com.alfabank.credit.config.PolicyProperties
 import com.alfabank.credit.config.ScorecardProperties
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
@@ -57,15 +56,10 @@ data class DecisionOutcome(
 @Component
 class TeamScoringService(
     private val scorecard: ScorecardProperties,
-    private val policy: PolicyProperties,
     private val gradeResolver: GradeResolver
 ) {
     companion object {
         private val HIGH_RISK_OKVED = listOf("56.", "41.", "42.", "43.")
-        private val MANUAL_REVIEW_OVER = BigDecimal("10000000")
-        private val GUARANTEE_RATE = BigDecimal("19.5")
-        private val COLLATERAL_DISCOUNT = BigDecimal("2.0")
-        private val STEP = BigDecimal("100000")
         private val MC = MathContext.DECIMAL64
     }
 
@@ -92,7 +86,7 @@ class TeamScoringService(
         val dtiPct = "${dti.multiply(BigDecimal(100)).setScale(0, RoundingMode.HALF_UP)}%"
         when {
             dti < BigDecimal("0.3") -> f += ScoreFactor("Низкая долговая нагрузка", 20, dtiPct)
-            dti < BigDecimal("0.6") -> f += ScoreFactor("Умеренная долговая нагрузка", 0, dtiPct)
+            dti <= BigDecimal("0.6") -> f += ScoreFactor("Умеренная долговая нагрузка", 0, dtiPct)
             else -> f += ScoreFactor("Высокая долговая нагрузка", -40, dtiPct, "R01")
         }
         // 4. Просрочки в БКИ
@@ -142,43 +136,4 @@ class TeamScoringService(
         else -> null
     }
 
-    fun decide(input: ScoringInput, productRatePercent: BigDecimal, sourcesOk: Boolean = true): DecisionOutcome {
-        stopFactor(input)?.let { return DecisionOutcome("REJECTED", it) }
-        if (!sourcesOk || input.requestedAmount > MANUAL_REVIEW_OVER) {
-            return DecisionOutcome("MANUAL_REVIEW", "Нужна ручная проверка специалистом")
-        }
-        val result = score(input)
-        if (result.grade == "D" || result.grade == "E") return DecisionOutcome("REJECTED", "Грейд ${result.grade}, балл ${result.score}", result)
-
-        // ИСПОЛЬЗУЕМ YAML ДЛЯ ПОЛИТИКИ
-        val gradePolicy = policy.grades[result.grade] ?: return DecisionOutcome("REJECTED", "Политика для грейда не найдена", result)
-
-        val rate = productRatePercent.add(BigDecimal(gradePolicy.rateSurcharge))
-        val limit = roundDown(input.annualRevenue.multiply(BigDecimal(gradePolicy.maxAmountPctRevenue).divide(BigDecimal(100))))
-
-        val amount = input.requestedAmount
-        if (amount <= limit) {
-            return DecisionOutcome("APPROVED", "Грейд ${result.grade}, сумма в пределах лимита", result,
-                listOf(offer("REQUESTED", amount, input.termMonths, rate)))
-        }
-        val middle = roundDown(limit.add(amount).divide(BigDecimal(2), MC))
-        val offers = listOf(
-            offer("LIMIT", limit, input.termMonths, rate),
-            offer("GUARANTEE", amount, maxOf(input.termMonths, 36), GUARANTEE_RATE),
-            offer("COLLATERAL", middle, input.termMonths + 6, productRatePercent.subtract(COLLATERAL_DISCOUNT)),
-        )
-        return DecisionOutcome("COUNTER_OFFER", "Сумма больше лимита грейда ${result.grade}: ${limit.toPlainString()} ₽", result, offers)
-    }
-
-    private fun roundDown(x: BigDecimal): BigDecimal = x.divide(STEP, 0, RoundingMode.DOWN).multiply(STEP)
-
-    private fun offer(kind: String, amount: BigDecimal, term: Int, ratePercent: BigDecimal): OfferOption {
-        val r = ratePercent.divide(BigDecimal(1200), MC)
-        val factor = BigDecimal.ONE.add(r).pow(term, MC)
-        val payment = amount.multiply(r).multiply(factor).divide(factor.subtract(BigDecimal.ONE), MC)
-        val overpay = payment.multiply(BigDecimal(term)).subtract(amount)
-        return OfferOption(kind, amount, term, ratePercent, round100(payment), round100(overpay))
-    }
-
-    private fun round100(x: BigDecimal): BigDecimal = x.divide(BigDecimal(100), 0, RoundingMode.HALF_UP).multiply(BigDecimal(100))
 }

@@ -8,7 +8,9 @@ data class OfferResponse(
     val amount: BigDecimal,
     val termMonths: Int,
     val interestRate: Double,
-    val type: String
+    val type: String,
+    val monthlyPayment: BigDecimal,
+    val overpayment: BigDecimal
 )
 
 data class ExplanationResponse(
@@ -22,5 +24,7 @@ data class PreapprovedOfferResponse(
     val maxAmount: BigDecimal,
     val termMonths: Int,
     val interestRate: Double,
+    val monthlyPayment: BigDecimal,
+    val overpayment: BigDecimal,
     val confidenceLevel: String
 )

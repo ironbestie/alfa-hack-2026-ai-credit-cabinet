@@ -9,6 +9,7 @@ data class ApplicationResponse(
     val status: ApplicationStatus,
     val requestedAmount: BigDecimal,
     val requestedTermMonths: Int,
+    val hasCollateral: Boolean,
     val riskScore: Int?,
     val scoringDetails: String?,
     val approvedAmount: BigDecimal?,

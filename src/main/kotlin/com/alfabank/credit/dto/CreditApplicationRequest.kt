@@ -8,5 +8,6 @@ data class CreateApplicationRequest(
     val productId: UUID,
     val requestedAmount: BigDecimal,
     val requestedTermMonths: Int,
-    val purpose: String? = null
+    val purpose: String? = null,
+    val hasCollateral: Boolean = false
 )

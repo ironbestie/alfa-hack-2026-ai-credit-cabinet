@@ -1,6 +1,7 @@
 package com.alfabank.credit.dto
 
 data class ScoreFactorDto(
+    val code: String? = null,
     val name: String,
     val contribution: Int,
     val description: String

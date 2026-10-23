@@ -1,4 +1,5 @@
 policy:
+  manual-review-over: 10000000
   grades:
     A:
       rate-surcharge: 0.0

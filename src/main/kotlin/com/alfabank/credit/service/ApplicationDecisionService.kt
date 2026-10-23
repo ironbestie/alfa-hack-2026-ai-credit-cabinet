@@ -1,5 +1,6 @@
 package com.alfabank.credit.service
 
+import com.alfabank.credit.config.PolicyProperties
 import com.alfabank.credit.domain.Application
 import com.alfabank.credit.domain.ApplicationEventType
 import com.alfabank.credit.domain.ApplicationStateMachine
@@ -9,6 +10,8 @@ import com.alfabank.credit.dto.OfferResponse
 import com.alfabank.credit.exception.NotFoundException
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.OfferRepository
+import com.alfabank.credit.scoring.GradeResolver
+import com.alfabank.credit.scoring.OfferMath
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -20,7 +23,9 @@ class ApplicationDecisionService(
     private val applicationRepository: ApplicationRepository,
     private val offerRepository: OfferRepository,
     private val eventService: ApplicationEventService,
-    private val accessService: ApplicationAccessService
+    private val accessService: ApplicationAccessService,
+    private val gradeResolver: GradeResolver,
+    private val policy: PolicyProperties
 ) {
     @Transactional
     fun acceptOffer(applicationId: UUID, offerId: UUID? = null) {
@@ -83,7 +88,9 @@ class ApplicationDecisionService(
                 amount = it.amount,
                 termMonths = it.termMonths,
                 interestRate = it.interestRate,
-                type = it.type
+                type = it.type,
+                monthlyPayment = OfferMath.monthlyPayment(it.amount, it.termMonths, it.interestRate),
+                overpayment = OfferMath.overpayment(it.amount, it.termMonths, it.interestRate)
             )
         }
     }
@@ -94,7 +101,8 @@ class ApplicationDecisionService(
         decisionType: String,
         approvedAmount: BigDecimal?,
         approvedTermMonths: Int?,
-        comment: String
+        comment: String,
+        reasonCode: String? = null
     ) {
         val application = applicationRepository.findById(applicationId)
             .orElseThrow { NotFoundException("Application not found") }
@@ -129,7 +137,10 @@ class ApplicationDecisionService(
             "REJECT" -> {
                 ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.REJECTED)
                 application.status = ApplicationStatus.REJECTED
-                application.rejectionReason = comment
+                application.rejectionReason = listOfNotNull(reasonCode, comment)
+                    .filter { it.isNotBlank() }
+                    .joinToString(": ")
+                    .ifBlank { "Отказ менеджера" }
             }
             else -> throw IllegalArgumentException(
                 "Unknown decision type: $decisionType. Allowed: APPROVE, COUNTER_OFFER, REQUEST_DOCS, REJECT"
@@ -143,10 +154,16 @@ class ApplicationDecisionService(
             saveOffer(application, offerType, offerAmount, offerTerm)
         }
 
+        val eventType = if (decisionType.equals("REQUEST_DOCS", ignoreCase = true)) {
+            ApplicationEventType.DOCUMENT_REQUESTED
+        } else {
+            ApplicationEventType.DECISION_MADE
+        }
+        val reasonPart = reasonCode?.let { " Код причины: $it." }.orEmpty()
         eventService.saveEvent(
             application,
-            ApplicationEventType.DECISION_MADE,
-            "Менеджер: ${decisionType.uppercase()}. $comment",
+            eventType,
+            "Менеджер: ${decisionType.uppercase()}.$reasonPart $comment",
             accessService.currentUsername()
         )
     }
@@ -157,9 +174,15 @@ class ApplicationDecisionService(
                 application = application,
                 amount = amount,
                 termMonths = termMonths,
-                interestRate = application.product.baseRate,
+                interestRate = rateFor(application),
                 type = type
             )
         )
+    }
+
+    private fun rateFor(application: Application): Double {
+        val grade = application.riskScore?.let { gradeResolver.gradeFor(it) }
+        val surcharge = grade?.let { policy.grades[it]?.rateSurcharge } ?: 0.0
+        return application.product.baseRate + surcharge
     }
 }

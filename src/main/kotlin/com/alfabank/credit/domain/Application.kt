@@ -7,9 +7,9 @@ import java.util.UUID
 
 enum class ApplicationStatus {
     DRAFT,
-    SUBMITTED,
     ENRICHMENT,
     SCORING,
+    DECISION,
     MANUAL_REVIEW,
     NEEDS_MORE_INFO,
     APPROVED,
@@ -17,6 +17,10 @@ enum class ApplicationStatus {
     REJECTED,
     SIGNING,
     FUNDED,
+    CLOSED,
+
+    // Legacy-значения: оставлены, чтобы старые строки в БД читались без миграции.
+    SUBMITTED,
     CANCELLED,
     EXPIRED
 }
@@ -44,6 +48,9 @@ class Application(
 
     val purpose: String? = null,
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    var hasCollateral: Boolean = false,
+
     @Column(name = "owner_username")
     var ownerUsername: String? = null,
 
@@ -55,6 +62,8 @@ class Application(
     var version: Long? = null,
 
     var riskScore: Int? = null,
+
+    @Column(length = 4000)
     var scoringDetails: String? = null,
     var approvedAmount: BigDecimal? = null,
     var approvedTermMonths: Int? = null,

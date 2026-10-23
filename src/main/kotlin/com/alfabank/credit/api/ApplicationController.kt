@@ -111,7 +111,7 @@ class ApplicationController(
 
     @Operation(
         summary = "Загрузить документ",
-        description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов). Возвращает заявку в работу."
+        description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов). Возвращает заявку в очередь менеджера."
     )
     @PostMapping("/{id}/documents")
     fun uploadDocument(

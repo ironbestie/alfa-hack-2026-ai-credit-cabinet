@@ -12,14 +12,15 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   minio:
-    image: elestio/minio:latest
+    # Зафиксированный digest вместо latest: образ не изменится между запусками.
+    image: elestio/minio@sha256:e7ffdea1db8e1830237169cbc481d52604f68447ce35df8ed5062202c3e3dc29
     container_name: alfa_credit_s3
     restart: always
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - ./minio_data:/data
+      - minio_data:/data
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -66,3 +67,4 @@ services:
 
 volumes:
   pgdata:
+  minio_data:

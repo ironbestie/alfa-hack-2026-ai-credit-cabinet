@@ -9,6 +9,9 @@ import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.ConsentRepository
 import com.alfabank.credit.repository.CreditProductRepository
 import com.alfabank.credit.scoring.GradeResolver
+import com.alfabank.credit.scoring.OfferMath
+import com.alfabank.credit.service.scoring.ScoringDetailsCodec
+import com.alfabank.credit.service.scoring.ScoringFactorRecord
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -28,7 +31,8 @@ class ApplicationService(
     private val aiAssistantClient: AiAssistantClient,
     private val sseService: SseService,
     private val accessService: ApplicationAccessService,
-    private val gradeResolver: GradeResolver
+    private val gradeResolver: GradeResolver,
+    private val scoringDetailsCodec: ScoringDetailsCodec
 ) {
     @Transactional
     fun createApplication(request: CreateApplicationRequest): ApplicationResponse {
@@ -52,6 +56,7 @@ class ApplicationService(
             requestedAmount = request.requestedAmount,
             requestedTermMonths = request.requestedTermMonths,
             purpose = request.purpose,
+            hasCollateral = request.hasCollateral,
             ownerUsername = owner,
             status = ApplicationStatus.DRAFT
         )
@@ -95,18 +100,19 @@ class ApplicationService(
         }
         accessService.checkAccess(application)
 
-        ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.SUBMITTED)
+        // По схеме кейса отправка сразу переводит заявку в ENRICHMENT, статус SUBMITTED не используем.
+        ApplicationStateMachine.validateTransition(application.status, ApplicationStatus.ENRICHMENT)
 
         val consents = consentRepository.findByApplicationId(applicationId)
         if (consents.none { it.consentType == "BKI" } || consents.none { it.consentType == "PD" }) {
             throw IllegalStateException("Необходимо подписать согласия БКИ и ПДн перед отправкой")
         }
 
-        application.status = ApplicationStatus.SUBMITTED
+        application.status = ApplicationStatus.ENRICHMENT
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
 
-        sseService.sendUpdate(applicationId.toString(), "SUBMITTED", "Заявка отправлена")
+        sseService.sendUpdate(applicationId.toString(), "ENRICHMENT", "Заявка отправлена, собираем данные")
         eventService.saveEvent(
             application,
             ApplicationEventType.STATUS_CHANGED,
@@ -150,11 +156,19 @@ class ApplicationService(
         val pageable = PageResponse.pageable(page, size, Sort.by(Sort.Direction.ASC, "updatedAt"))
         val applications = applicationRepository.findByStatus(ApplicationStatus.MANUAL_REVIEW, pageable)
         return PageResponse.from(applications.map {
+            val factors = scoringDetailsCodec.decode(it.scoringDetails)
+            val negativeFactors = factors.filter { factor -> factor.points < 0 }.sortedBy { factor -> factor.points }
+            val reason = negativeFactors.take(2).joinToString("; ") { factor -> factor.label }
+                .ifBlank { it.rejectionReason ?: "Ручная проверка" }
+
             mapOf(
                 "id" to it.id,
                 "amount" to it.requestedAmount,
                 "score" to it.riskScore,
-                "reason" to it.scoringDetails
+                "grade" to it.riskScore?.let { score -> gradeResolver.gradeFor(score) },
+                "reason" to reason,
+                "createdAt" to it.createdAt,
+                "updatedAt" to it.updatedAt
             )
         })
     }
@@ -166,32 +180,36 @@ class ApplicationService(
         }
         accessService.checkAccess(application)
 
-        val reasons = mutableListOf<String>()
-        val nextSteps = mutableListOf<String>()
+        val factors = scoringDetailsCodec.decode(application.scoringDetails)
+        val reasons = factors
+            .filter { it.points < 0 }
+            .sortedBy { it.points }
+            .take(3)
+            .map { formatFactor(it) }
+            .ifEmpty { factors.take(3).map { formatFactor(it) } }
+            .ifEmpty { listOf("Стандартный риск") }
 
-        if (application.scoringDetails != null) {
-            reasons.addAll(application.scoringDetails!!.split("; ").filter { it.isNotBlank() })
+        val nextSteps = buildNextSteps(application, factors)
+        val fallback = buildFallbackExplanation(application, reasons)
+        val factsForAi = buildString {
+            append("Статус заявки: ${application.status}. ")
+            append("Балл: ${application.riskScore ?: "не рассчитан"}. ")
+            application.riskScore?.let { append("Грейд: ${gradeResolver.gradeFor(it)}. ") }
+            append("Запрошенная сумма: ${application.requestedAmount.toPlainString()} ₽. ")
+            application.approvedAmount?.let { append("Одобренная сумма: ${it.toPlainString()} ₽. ") }
+            append("Главные причины: ${reasons.joinToString(", ")}. ")
+            append("Следующие шаги: ${nextSteps.joinToString(", ")}.")
         }
 
-        if (application.status == ApplicationStatus.REJECTED || application.status == ApplicationStatus.COUNTER_OFFER) {
-            nextSteps.add("Погасите мелкие кредиты, и нагрузка снизится.")
-            nextSteps.add("Вернитесь через 3 месяца: мы пересчитаем лимит автоматически.")
-        } else if (application.status == ApplicationStatus.APPROVED) {
-            nextSteps.add("Вы можете принять предложение и подписать документы.")
-        }
+        val prompt = "Ты вежливый банковский ассистент. На основе данных напиши клиенту краткое объяснение решения " +
+                "(1-2 предложения). Не используй сложные банковские термины и не добавляй числа, которых нет в данных. " +
+                "Данные: $factsForAi"
 
-        val factsForAi = "Статус заявки: ${application.status}. " +
-                "Причины: ${reasons.joinToString(", ")}. " +
-                "Запрошенная сумма: ${application.requestedAmount}."
-
-        val prompt = "Ты вежливый банковский ассистент. На основе этих данных напиши клиенту краткое объяснение решения (1-2 предложения). " +
-                "Не используй сложные банковские термины. Данные: $factsForAi"
-
-        val aiSummary = aiAssistantClient.generateExplanation(prompt)
+        val aiSummary = aiAssistantClient.generateExplanation(prompt, fallback)
 
         return ExplanationResponse(
             summary = aiSummary,
-            reasons = reasons.ifEmpty { listOf("Стандартный риск") },
+            reasons = reasons,
             nextSteps = nextSteps
         )
     }
@@ -201,13 +219,20 @@ class ApplicationService(
         val company = companyRepository.findByInn(inn)
             ?: throw NotFoundException("Company not found")
 
-        val maxAmount = company.annualRevenue.divide(BigDecimal("4")).min(BigDecimal("30000000"))
+        val maxAmount = company.annualRevenue
+            .divide(BigDecimal("4"))
+            .min(BigDecimal("30000000"))
+            .max(BigDecimal("500000"))
+        val termMonths = 24
+        val rate = 22.0
 
         return PreapprovedOfferResponse(
             inn = inn,
-            maxAmount = maxAmount.max(BigDecimal("500000")),
-            termMonths = 24,
-            interestRate = 22.0,
+            maxAmount = maxAmount,
+            termMonths = termMonths,
+            interestRate = rate,
+            monthlyPayment = OfferMath.monthlyPayment(maxAmount, termMonths, rate),
+            overpayment = OfferMath.overpayment(maxAmount, termMonths, rate),
             confidenceLevel = "PREAPPROVED"
         )
     }
@@ -223,19 +248,13 @@ class ApplicationService(
             throw IllegalStateException("Скоринг для этой заявки еще не выполнен")
         }
 
-        val factors = mutableListOf<ScoreFactorDto>()
-        if (application.scoringDetails != null) {
-            val parts = application.scoringDetails!!.split("; ")
-            for (part in parts) {
-                val match = Regex("^(.*) \\((-?\\d+)\\)$").find(part)
-                if (match != null) {
-                    val name = match.groupValues[1]
-                    val contribution = match.groupValues[2].toIntOrNull() ?: 0
-                    factors.add(ScoreFactorDto(name, contribution, ""))
-                } else {
-                    factors.add(ScoreFactorDto(part, 0, ""))
-                }
-            }
+        val factors = scoringDetailsCodec.decode(application.scoringDetails).map {
+            ScoreFactorDto(
+                code = it.code,
+                name = it.label,
+                contribution = it.points,
+                description = it.description
+            )
         }
 
         val grade = gradeResolver.gradeFor(application.riskScore!!)
@@ -248,12 +267,77 @@ class ApplicationService(
         )
     }
 
+    private fun formatFactor(factor: ScoringFactorRecord): String =
+        if (factor.description.isBlank()) factor.label else "${factor.label} (${factor.description})"
+
+    private fun buildNextSteps(application: Application, factors: List<ScoringFactorRecord>): List<String> {
+        val codes = factors.mapNotNull { it.code }.toSet()
+        val steps = mutableListOf<String>()
+
+        if ("R01" in codes || "R05" in codes) {
+            steps += "Сократите долговую нагрузку: погасите часть действующих кредитов."
+        }
+        if ("R02" in codes) {
+            steps += "Закройте просроченную задолженность — это самый важный фактор для банка."
+        }
+        if ("R03" in codes) {
+            steps += "Кредитная история ещё короткая. Вернитесь через 3 месяца: лимит пересчитается автоматически."
+        }
+        if ("R04" in codes) {
+            steps += "Погасите налоговую задолженность и приложите подтверждающий документ."
+        }
+        if ("R06" in codes) {
+            steps += "Запросите сумму меньше 50% годовой выручки или увеличьте подтверждённую выручку."
+        }
+
+        when (application.status) {
+            ApplicationStatus.REJECTED ->
+                steps += "Подайте заявку повторно через 3 месяца или обратитесь к менеджеру."
+            ApplicationStatus.COUNTER_OFFER ->
+                steps += "Примите одно из контрпредложений: лимит, поручительство или залог."
+            ApplicationStatus.MANUAL_REVIEW ->
+                steps += "Менеджер проверит данные в течение 24 часов. Дополнительно ничего делать не нужно."
+            ApplicationStatus.NEEDS_MORE_INFO ->
+                steps += "Загрузите запрошенные документы в карточке заявки."
+            ApplicationStatus.APPROVED ->
+                steps += "Примите предложение и подпишите документы."
+            ApplicationStatus.SIGNING ->
+                steps += "Подпишите документы, чтобы получить деньги на счёт."
+            ApplicationStatus.FUNDED ->
+                steps += "Деньги зачислены на счёт. Следите за графиком платежей."
+            else -> Unit
+        }
+
+        return steps.distinct().take(4).ifEmpty {
+            listOf("Следите за статусом заявки — он обновляется автоматически.")
+        }
+    }
+
+    private fun buildFallbackExplanation(application: Application, reasons: List<String>): String {
+        val scorePart = application.riskScore?.let { " Балл: $it." }.orEmpty()
+        return when (application.status) {
+            ApplicationStatus.APPROVED ->
+                "Заявка одобрена.$scorePart Условия предложения уже доступны в карточке заявки."
+            ApplicationStatus.COUNTER_OFFER ->
+                "Запрошенная сумма больше доступного лимита.$scorePart Мы подготовили альтернативные условия — выберите подходящий вариант."
+            ApplicationStatus.REJECTED ->
+                "К сожалению, мы не можем одобрить заявку.$scorePart Основная причина: ${reasons.first()}."
+            ApplicationStatus.MANUAL_REVIEW ->
+                "Заявка передана менеджеру на ручную проверку.$scorePart Это займёт до 24 часов."
+            ApplicationStatus.NEEDS_MORE_INFO ->
+                "Для продолжения рассмотрения нужны дополнительные документы.$scorePart Загрузите их в карточке заявки."
+            else ->
+                "Мы проанализировали заявку на основе доступных данных.$scorePart Рекомендуем ознакомиться с шагами для улучшения кредитного профиля."
+        }
+    }
+
     private fun mapToResponse(application: Application): ApplicationResponse {
         return ApplicationResponse(
             id = application.id!!,
             status = application.status,
             requestedAmount = application.requestedAmount,
             requestedTermMonths = application.requestedTermMonths,
+            hasCollateral = application.hasCollateral,
             riskScore = application.riskScore,
             scoringDetails = application.scoringDetails,
             approvedAmount = application.approvedAmount,

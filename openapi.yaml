@@ -390,6 +390,11 @@ paths:
                   type: integer
                 comment:
                   type: string
+                reasonCode:
+                  type: string
+                  nullable: true
+                  description: Код причины отказа из справочника R01–R06
+                  example: R01
       responses:
         '200':
           description: Решение зафиксировано
@@ -431,6 +436,17 @@ components:
         default: 20
 
   schemas:
+    ApiError:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          example: "Заявка не найдена"
+        code:
+          type: string
+          example: NOT_FOUND
+
     CreateApplicationRequest:
       type: object
       required: [companyId, productId, requestedAmount, requestedTermMonths]
@@ -452,6 +468,10 @@ components:
           nullable: true
           description: Цель кредита, выбранная в квизе
           example: "ОБОРУДОВАНИЕ"
+        hasCollateral:
+          type: boolean
+          default: false
+          description: Есть ли обеспечение по заявке (влияет на скоринг)
 
     ApplicationResponse:
       type: object
@@ -461,17 +481,20 @@ components:
           format: uuid
         status:
           type: string
-          enum: [DRAFT, SUBMITTED, ENRICHMENT, SCORING, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CANCELLED, EXPIRED]
+          enum: [DRAFT, ENRICHMENT, SCORING, DECISION, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CLOSED]
         requestedAmount:
           type: number
         requestedTermMonths:
           type: integer
+        hasCollateral:
+          type: boolean
         riskScore:
           type: integer
           nullable: true
         scoringDetails:
           type: string
           nullable: true
+          description: JSON-массив факторов скоринга (для обратной совместимости читается и старый формат)
         approvedAmount:
           type: number
           nullable: true
@@ -494,6 +517,12 @@ components:
         type:
           type: string
           enum: [REQUESTED, LIMIT, GUARANTEE, COLLATERAL]
+        monthlyPayment:
+          type: number
+          description: Аннуитетный платёж, округлённый до 100 ₽
+        overpayment:
+          type: number
+          description: Переплата за весь срок, округлённая до 100 ₽
 
     ScoreResponse:
       type: object
@@ -514,6 +543,11 @@ components:
     ScoreFactor:
       type: object
       properties:
+        code:
+          type: string
+          nullable: true
+          description: Код причины R01–R06
+          example: R01
         name:
           type: string
         contribution:
@@ -546,6 +580,10 @@ components:
         termMonths:
           type: integer
         interestRate:
+          type: number
+        monthlyPayment:
+          type: number
+        overpayment:
           type: number
         confidenceLevel:
           type: string
@@ -647,9 +685,19 @@ components:
         score:
           type: integer
           nullable: true
+        grade:
+          type: string
+          nullable: true
+          enum: [A, B, C, D]
         reason:
           type: string
           nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     Company:
       type: object

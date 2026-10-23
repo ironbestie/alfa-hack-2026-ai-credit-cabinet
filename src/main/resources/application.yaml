@@ -40,6 +40,11 @@ springdoc:
 app:
   mocks:
     url: ${APP_MOCKS_URL:http://localhost:8089}
+  ai:
+    base-url: ${APP_AI_BASE_URL:http://localhost:11434}
+    api-key: ${APP_AI_API_KEY:}
+    model: ${APP_AI_MODEL:qwen2.5:7b}
+    timeout-seconds: ${APP_AI_TIMEOUT_SECONDS:10}
   s3:
     endpoint: ${APP_S3_ENDPOINT:http://localhost:9000}
     access-key: ${APP_S3_ACCESS_KEY:minioadmin}
@@ -56,6 +61,8 @@ app:
 
 resilience4j:
   circuitbreaker:
+    # CircuitBreaker снаружи, Retry внутри: сначала все попытки, затем fallback.
+    circuitBreakerAspectOrder: 1
     instances:
       mocksCircuit:
         slidingWindowSize: 10
@@ -67,6 +74,7 @@ resilience4j:
       mocksCircuit:
         timeoutDuration: 3s
   retry:
+    retryAspectOrder: 2
     instances:
       mocksRetry:
         maxAttempts: 3

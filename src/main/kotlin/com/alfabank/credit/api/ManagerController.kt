@@ -12,9 +12,10 @@ import java.util.UUID
 
 data class ManagerDecisionRequest(
     val decisionType: String,
-    val approvedAmount: BigDecimal?,
-    val approvedTermMonths: Int?,
-    val comment: String
+    val approvedAmount: BigDecimal? = null,
+    val approvedTermMonths: Int? = null,
+    val comment: String = "",
+    val reasonCode: String? = null
 )
 
 @Tag(name = "Кабинет менеджера", description = "Ручное рассмотрение заявок (серые зоны)")
@@ -47,7 +48,8 @@ class ManagerController(
             decisionType = request.decisionType,
             approvedAmount = request.approvedAmount,
             approvedTermMonths = request.approvedTermMonths,
-            comment = request.comment
+            comment = request.comment,
+            reasonCode = request.reasonCode
         )
         return mapOf("message" to "Decision processed")
     }

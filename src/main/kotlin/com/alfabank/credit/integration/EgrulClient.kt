@@ -17,18 +17,27 @@ interface EgrulClient {
 }
 
 @Service
-class MockEgrulClient : EgrulClient {
+class MockEgrulClient(
+    private val mockClient: MockIntegrationClient
+) : EgrulClient {
     override fun fetchCompanyByInn(inn: String): EgrulData? {
-        Thread.sleep(800) // Имитация задержки сети
-        if (inn.length != 10 && inn.length != 12) return null
+        val data = mockClient.getEgrul(inn) ?: return null
+        val registrationDate = data.registrationDate
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: return null
+
+        val okved = listOfNotNull(
+            data.okved?.code?.takeIf { it.isNotBlank() },
+            data.okved?.name
+        ).joinToString(" ")
 
         return EgrulData(
-            inn = inn,
-            name = "ООО 'Умный Бизнес' (ИНН $inn)",
-            ogrn = "1234567890123",
-            directorName = "Петров Петр Петрович",
-            registrationDate = LocalDate.of(2019, 5, 20),
-            okved = "62.01 (Разработка ПО)"
+            inn = data.inn.ifBlank { inn },
+            name = data.displayName,
+            ogrn = data.ogrn.orEmpty(),
+            directorName = data.director?.fullName.orEmpty(),
+            registrationDate = registrationDate,
+            okved = okved
         )
     }
 }
