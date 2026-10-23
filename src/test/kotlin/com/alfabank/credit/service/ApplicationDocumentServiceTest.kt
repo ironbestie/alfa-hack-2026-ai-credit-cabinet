@@ -10,6 +10,7 @@ import com.alfabank.credit.service.storage.DocumentStorage
 import com.alfabank.credit.service.storage.StoredDocument
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.any
 import org.mockito.Mockito.argThat
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
@@ -102,5 +103,36 @@ class ApplicationDocumentServiceTest {
             "MANUAL_REVIEW",
             "Документ загружен, заявка возвращена менеджеру"
         )
+    }
+
+    @Test
+    fun `удаляет объект из S3 при ошибке сохранения в БД`() {
+        val applicationId = UUID.randomUUID()
+        val application = mock(Application::class.java)
+        `when`(application.status).thenReturn(ApplicationStatus.NEEDS_MORE_INFO)
+        `when`(applicationRepository.findById(applicationId)).thenReturn(Optional.of(application))
+
+        val file = MockMultipartFile(
+            "file",
+            "statement.pdf",
+            "application/pdf",
+            "%PDF-1.7\ncontent".toByteArray()
+        )
+        val storedDocument = StoredDocument(
+            key = "applications/$applicationId/document.pdf",
+            originalFileName = "statement.pdf",
+            contentType = "application/pdf",
+            sizeBytes = file.size,
+            sha256 = "a".repeat(64)
+        )
+        `when`(documentStorage.store(file, applicationId.toString())).thenReturn(storedDocument)
+        `when`(documentRepository.save(any(com.alfabank.credit.domain.Document::class.java)))
+            .thenThrow(RuntimeException("DB is unavailable"))
+
+        assertThrows(RuntimeException::class.java) {
+            service.uploadDocument(applicationId, file)
+        }
+
+        verify(documentStorage).delete(storedDocument.key)
     }
 }

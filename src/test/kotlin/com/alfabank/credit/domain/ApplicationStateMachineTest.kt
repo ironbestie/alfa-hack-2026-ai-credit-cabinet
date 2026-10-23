@@ -42,4 +42,14 @@ class ApplicationStateMachineTest {
             ApplicationStateMachine.validateTransition(ApplicationStatus.DRAFT, ApplicationStatus.APPROVED)
         }
     }
+
+    @Test
+    fun `сбой источника на этапе скоринга уводит заявку на ручную проверку`() {
+        assertDoesNotThrow {
+            ApplicationStateMachine.validateTransition(
+                ApplicationStatus.SCORING,
+                ApplicationStatus.MANUAL_REVIEW
+            )
+        }
+    }
 }

@@ -80,8 +80,6 @@ class TeamScoringTest {
         val limitOffer = decision.offers.first()
         assertEquals("LIMIT", limitOffer.kind)
         assertEquals(BigDecimal("3000000"), limitOffer.amount)
-        assertEquals(BigDecimal("157100"), limitOffer.monthlyPayment)
-        assertEquals(BigDecimal("770900"), limitOffer.overpayment)
     }
 
     @Test

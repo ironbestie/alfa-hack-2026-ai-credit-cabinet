@@ -15,5 +15,4 @@ class PolicyProperties {
 class GradePolicy {
     var rateSurcharge: Double = 0.0
     var maxAmountPctRevenue: Int = 0
-    var maxAmountPctRevenueGuarantee: Int = 0
 }

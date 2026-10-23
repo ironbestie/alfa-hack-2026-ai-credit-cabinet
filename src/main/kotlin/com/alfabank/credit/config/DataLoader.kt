@@ -2,11 +2,9 @@ package com.alfabank.credit.config
 
 import com.alfabank.credit.domain.Company
 import com.alfabank.credit.domain.CreditProduct
-import com.alfabank.credit.domain.Manager
 import com.alfabank.credit.repository.ApplicationRepository
 import com.alfabank.credit.repository.CompanyRepository
 import com.alfabank.credit.repository.CreditProductRepository
-import com.alfabank.credit.repository.ManagerRepository
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
 import org.springframework.stereotype.Component
@@ -18,7 +16,6 @@ import java.time.LocalDate
 class DataLoader(
     private val companyRepository: CompanyRepository,
     private val productRepository: CreditProductRepository,
-    private val managerRepository: ManagerRepository,
     private val applicationRepository: ApplicationRepository
 ) : CommandLineRunner {
 
@@ -28,7 +25,6 @@ class DataLoader(
     override fun run(vararg args: String?) {
         seedCompanies()
         seedProducts()
-        seedManagers()
         applicationRepository.backfillVersions()
         backfillApplicationOwners()
     }
@@ -102,14 +98,6 @@ class DataLoader(
             CreditProduct(name = "Кредит с господдержкой", description = "Поручительство Корпорации МСП", minAmount = BigDecimal("100000"), maxAmount = BigDecimal("50000000"), minTerm = 3, maxTerm = 36, baseRate = 19.5, tags = "[\"Без залога\", \"Госпрограмма\"]")
         ))
         log.info("Synthetic products loaded successfully.")
-    }
-
-    private fun seedManagers() {
-        if (managerRepository.count() > 0) return
-        managerRepository.saveAll(listOf(
-            Manager(name = "Анна К.", role = "credit_analyst"),
-            Manager(name = "Сергей М.", role = "senior_analyst")
-        ))
     }
 
     private fun backfillApplicationOwners() {

@@ -13,7 +13,11 @@ object ApplicationStateMachine {
             ApplicationStatus.REJECTED,
             ApplicationStatus.CLOSED
         ),
-        ApplicationStatus.SCORING to setOf(ApplicationStatus.DECISION),
+        ApplicationStatus.SCORING to setOf(
+            ApplicationStatus.DECISION,
+            ApplicationStatus.MANUAL_REVIEW,
+            ApplicationStatus.REJECTED
+        ),
         ApplicationStatus.DECISION to setOf(
             ApplicationStatus.APPROVED,
             ApplicationStatus.COUNTER_OFFER,
@@ -33,9 +37,7 @@ object ApplicationStateMachine {
         ApplicationStatus.SIGNING to setOf(ApplicationStatus.FUNDED),
         ApplicationStatus.REJECTED to emptySet(),
         ApplicationStatus.FUNDED to emptySet(),
-        ApplicationStatus.CLOSED to emptySet(),
-        ApplicationStatus.CANCELLED to emptySet(),
-        ApplicationStatus.EXPIRED to emptySet()
+        ApplicationStatus.CLOSED to emptySet()
     )
 
     fun validateTransition(currentStatus: ApplicationStatus, nextStatus: ApplicationStatus) {

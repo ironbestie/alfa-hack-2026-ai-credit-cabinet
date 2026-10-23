@@ -67,9 +67,4 @@ class ScoringService(
     fun score(input: ScoringInput): TeamScoringResult = teamScoringService.score(input)
 
     fun stopFactor(input: ScoringInput): String? = teamScoringService.stopFactor(input)
-
-    fun calculateScore(application: Application): ScoringPayload {
-        val enrichment = enrich(application)
-        return ScoringPayload(enrichment.input, score(enrichment.input), enrichment.sourcesOk)
-    }
 }

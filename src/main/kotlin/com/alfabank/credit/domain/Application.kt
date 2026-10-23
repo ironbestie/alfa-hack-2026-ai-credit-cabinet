@@ -67,10 +67,6 @@ class Application(
     var approvedAmount: BigDecimal? = null,
     var approvedTermMonths: Int? = null,
     var rejectionReason: String? = null,
-    var assignedManagerId: String? = null,
-
-    @Column(unique = true)
-    val idempotencyKey: String? = null,
 
     @Column(nullable = false)
     val createdAt: Instant = Instant.now(),

@@ -3,7 +3,6 @@ package com.alfabank.credit.service.scoring
 import com.alfabank.credit.config.PolicyProperties
 import com.alfabank.credit.domain.Application
 import com.alfabank.credit.scoring.DecisionOutcome
-import com.alfabank.credit.scoring.OfferMath
 import com.alfabank.credit.scoring.OfferOption
 import com.alfabank.credit.scoring.TeamScoringService
 import org.springframework.stereotype.Service
@@ -27,32 +26,30 @@ class DecisionService(
         val input = payload.input
 
         teamScoringService.stopFactor(input)?.let {
-            return DecisionOutcome("REJECTED", it, payload.result)
+            return DecisionOutcome("REJECTED", it)
         }
 
         if (!payload.sourcesOk) {
             return DecisionOutcome(
                 "MANUAL_REVIEW",
-                "Не все источники данных ответили. Заявку проверит специалист.",
-                payload.result
+                "Не все источники данных ответили. Заявку проверит специалист."
             )
         }
 
         if (input.requestedAmount > policy.manualReviewOver) {
             return DecisionOutcome(
                 "MANUAL_REVIEW",
-                "Сумма заявки больше ${policy.manualReviewOver.toPlainString()} ₽. Нужна ручная проверка.",
-                payload.result
+                "Сумма заявки больше ${policy.manualReviewOver.toPlainString()} ₽. Нужна ручная проверка."
             )
         }
 
         val result = payload.result
         if (result.grade == "D" || result.grade == "E") {
-            return DecisionOutcome("REJECTED", "Грейд ${result.grade}, балл ${result.score}", result)
+            return DecisionOutcome("REJECTED", "Грейд ${result.grade}, балл ${result.score}")
         }
 
         val gradePolicy = policy.grades[result.grade]
-            ?: return DecisionOutcome("REJECTED", "Политика для грейда не найдена", result)
+            ?: return DecisionOutcome("REJECTED", "Политика для грейда не найдена")
 
         val productRate = BigDecimal.valueOf(application.product.baseRate)
         val rate = productRate.add(BigDecimal.valueOf(gradePolicy.rateSurcharge))
@@ -65,7 +62,6 @@ class DecisionService(
             return DecisionOutcome(
                 "APPROVED",
                 "Грейд ${result.grade}, сумма в пределах лимита",
-                result,
                 listOf(offer("REQUESTED", input.requestedAmount, input.termMonths, rate))
             )
         }
@@ -85,7 +81,6 @@ class DecisionService(
         return DecisionOutcome(
             "COUNTER_OFFER",
             "Сумма больше лимита грейда ${result.grade}: ${limit.toPlainString()} ₽",
-            result,
             offers
         )
     }
@@ -98,8 +93,6 @@ class DecisionService(
             kind = kind,
             amount = amount,
             termMonths = termMonths,
-            ratePercent = ratePercent,
-            monthlyPayment = OfferMath.monthlyPayment(amount, termMonths, ratePercent.toDouble()),
-            overpayment = OfferMath.overpayment(amount, termMonths, ratePercent.toDouble())
+            ratePercent = ratePercent
         )
 }

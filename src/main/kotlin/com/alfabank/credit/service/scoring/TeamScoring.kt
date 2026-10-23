@@ -33,7 +33,6 @@ data class ScoreFactor(
 data class TeamScoringResult(
     val score: Int,
     val grade: String,
-    val riskLevel: String,
     val factors: List<ScoreFactor>,
 )
 
@@ -42,14 +41,11 @@ data class OfferOption(
     val amount: BigDecimal,
     val termMonths: Int,
     val ratePercent: BigDecimal,
-    val monthlyPayment: BigDecimal,
-    val overpayment: BigDecimal,
 )
 
 data class DecisionOutcome(
     val status: String,
     val reason: String,
-    val scoring: TeamScoringResult? = null,
     val offers: List<OfferOption> = emptyList(),
 )
 
@@ -110,11 +106,9 @@ class TeamScoringService(
 
         val grade = gradeResolver.gradeFor(score)
 
-        val risk = gradeResolver.riskLevel(grade)
-
         val finalFactors = f.map { it.copy(contribution = it.points * scorecard.base.multiplier) }
 
-        return TeamScoringResult(score, grade, risk, finalFactors)
+        return TeamScoringResult(score, grade, finalFactors)
     }
 
     fun stopFactor(input: ScoringInput): String? = when {

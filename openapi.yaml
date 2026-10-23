@@ -390,6 +390,37 @@ paths:
         '200':
           description: Решение зафиксировано
 
+  /api/manager/dlq:
+    get:
+      tags: [Manager]
+      summary: Очередь недоставленных событий (DLQ)
+      description: Заявки, обработка которых завершилась ошибкой после всех повторных попыток.
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Страница записей DLQ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterPage'
+
+  /api/manager/dlq/{applicationId}/retry:
+    post:
+      tags: [Manager]
+      summary: Повторить обработку из DLQ
+      description: Сбрасывает счётчик попыток и возвращает заявку в очередь периодической обработки.
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdPath'
+      responses:
+        '200':
+          description: Заявка поставлена в очередь повторной обработки
+
 components:
   securitySchemes:
     basicAuth:
@@ -400,6 +431,14 @@ components:
   parameters:
     ApplicationId:
       name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: "d1b42044-9499-43b9-9f95-02ff34fc0fda"
+    ApplicationIdPath:
+      name: applicationId
       in: path
       required: true
       schema:
@@ -686,6 +725,31 @@ components:
         createdAt:
           type: string
           format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DeadLetterPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/DeadLetterResponse'
+
+    DeadLetterResponse:
+      type: object
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+        attempts:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
         updatedAt:
           type: string
           format: date-time

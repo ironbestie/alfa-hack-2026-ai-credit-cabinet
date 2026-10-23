@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import java.util.UUID
 
@@ -53,7 +54,26 @@ class S3FileStorage(
             )
         } catch (e: Exception) {
             log.error("Failed to upload file to S3", e)
+            runCatching { delete(key) }
+                .onFailure { cleanupError ->
+                    log.error("Failed to clean up S3 object after upload error: $key", cleanupError)
+                }
             throw RuntimeException("Could not upload document", e)
+        }
+    }
+
+    override fun delete(key: String) {
+        try {
+            s3Client.deleteObject(
+                DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build()
+            )
+            log.info("File deleted from S3: $key")
+        } catch (e: Exception) {
+            log.error("Failed to delete file from S3: $key", e)
+            throw RuntimeException("Could not delete document", e)
         }
     }
 }
