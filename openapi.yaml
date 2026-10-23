@@ -233,7 +233,7 @@ paths:
     post:
       tags: [Applications]
       summary: Загрузить документ (дозапрос)
-      description: Используется, если заявка в статусе NEEDS_MORE_INFO.
+      description: Используется, если заявка в статусе NEEDS_MORE_INFO. Допустимые форматы: PDF, JPG, JPEG, PNG. Максимальный размер: 10 МБ.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
       requestBody:

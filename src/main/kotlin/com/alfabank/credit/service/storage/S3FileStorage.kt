@@ -13,6 +13,7 @@ import java.util.UUID
 @Service
 class S3FileStorage(
     private val s3Client: S3Client,
+    private val documentValidator: DocumentValidator,
     @Value("\${app.s3.bucket-name}") private val bucketName: String
 ) : DocumentStorage {
 
@@ -29,24 +30,27 @@ class S3FileStorage(
         }
     }
 
-    override fun store(file: MultipartFile, applicationId: String): String {
-        if (file.isEmpty) throw IllegalArgumentException("File is empty")
-        if (file.size > 10 * 1024 * 1024) throw IllegalArgumentException("File size exceeds 10MB")
-
-        val extension = file.originalFilename?.substringAfterLast('.', "")?.lowercase() ?: "bin"
-        val key = "applications/$applicationId/${UUID.randomUUID()}.$extension"
+    override fun store(file: MultipartFile, applicationId: String): StoredDocument {
+        val validated = documentValidator.validate(file)
+        val key = "applications/$applicationId/${UUID.randomUUID()}.${validated.extension}"
 
         try {
             s3Client.putObject(
                 PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
-                    .contentType(file.contentType)
+                    .contentType(validated.contentType)
                     .build(),
                 RequestBody.fromInputStream(file.inputStream, file.size)
             )
             log.info("File uploaded to S3: $key")
-            return key
+            return StoredDocument(
+                key = key,
+                originalFileName = validated.originalFileName,
+                contentType = validated.contentType,
+                sizeBytes = file.size,
+                sha256 = validated.sha256
+            )
         } catch (e: Exception) {
             log.error("Failed to upload file to S3", e)
             throw RuntimeException("Could not upload document", e)

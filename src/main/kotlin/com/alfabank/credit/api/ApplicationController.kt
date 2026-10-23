@@ -112,7 +112,7 @@ class ApplicationController(
 
     @Operation(
         summary = "Загрузить документ",
-        description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов). Возвращает заявку в очередь менеджера."
+        description = "Используется, если заявка в статусе NEEDS_MORE_INFO (дозапрос документов). Допустимые форматы: PDF, JPG, JPEG, PNG. Максимальный размер: 10 МБ. Возвращает заявку в очередь менеджера."
     )
     @PostMapping("/{id}/documents", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun uploadDocument(

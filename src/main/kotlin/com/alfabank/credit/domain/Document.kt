@@ -18,6 +18,18 @@ class Document(
     @Column(nullable = false)
     val fileName: String,
 
+    @Column(name = "original_file_name")
+    val originalFileName: String? = null,
+
+    @Column(name = "content_type")
+    val contentType: String? = null,
+
+    @Column(name = "size_bytes")
+    val sizeBytes: Long? = null,
+
+    @Column(name = "sha256", length = 64)
+    val sha256: String? = null,
+
     @Column(nullable = false)
     val uploadDate: Instant = Instant.now()
 )
