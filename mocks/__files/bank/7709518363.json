@@ -1,0 +1,8 @@
+{
+  "inn": "7709518363",
+  "isClient": true,
+  "clientSince": "2024-10-01",
+  "relationshipMonths": 24,
+  "avgMonthlyInflow": 1000000,
+  "monthlyInflows": [880000, 920000, 1050000, 990000, 1100000, 1020000, 960000, 1040000, 1010000, 970000, 1060000, 1000000]
+}
