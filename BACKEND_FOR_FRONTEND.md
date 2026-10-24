@@ -9,7 +9,7 @@
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 - Авторизация: HTTP Basic Auth
-- Формат данных: JSON, кроме загрузки документов (`multipart/form-data`)
+- Формат данных: JSON, кроме загрузки документов (`multipart/form-data`) и скачивания файла (бинарный поток)
 - Время: ISO-8601 UTC, например `2026-10-24T01:00:00Z`
 - Деньги: JSON-число, например `3000000`
 - ID: UUID-строки
@@ -35,7 +35,7 @@
 8. **Экран решения** — одобрено / контрпредложение / отказ, факторы и объяснение.
 9. **Сравнение офферов** — сумма, срок, ставка, ежемесячный платёж, переплата.
 10. **Принятие оффера и подписание** — `SIGNING -> FUNDED`.
-11. **Загрузка документов** — если менеджер запросил документы (`NEEDS_MORE_INFO`).
+11. **Документы** — загрузка при `NEEDS_MORE_INFO`, список загруженных файлов и скачивание.
 
 ### Кабинет менеджера
 
@@ -84,7 +84,7 @@ fetch(`${BASE_URL}/api/applications`, {
 
 ### Пагинация
 
-Все списочные эндпоинты принимают:
+Списки заявок, компаний, продуктов, событий, очереди менеджера и DLQ принимают:
 
 ```http
 ?page=0&size=20
@@ -230,19 +230,36 @@ Idempotency-Key: <uuid>
 {
   "id": "<APPLICATION_ID>",
   "status": "DRAFT",
+  "company": {
+    "id": "<COMPANY_ID>",
+    "inn": "7704983159",
+    "ogrn": "1187746198342",
+    "name": "ООО «ТехноПрогресс»",
+    "category": "Малое",
+    "status": "active"
+  },
+  "product": {
+    "id": "<PRODUCT_ID>",
+    "name": "Оборотный кредит",
+    "baseRate": 22.0
+  },
   "requestedAmount": 3000000,
   "requestedTermMonths": 24,
+  "purpose": "Пополнение оборотных средств",
   "hasCollateral": false,
   "riskScore": null,
   "scoringDetails": null,
   "approvedAmount": null,
-  "rejectionReason": null
+  "approvedTermMonths": null,
+  "rejectionReason": null,
+  "createdAt": "2026-10-24T01:00:00Z",
+  "updatedAt": "2026-10-24T01:00:00Z"
 }
 ```
 
-Важно: `ApplicationResponse` не содержит `companyId`, `productId`, `purpose`, `createdAt`,
-`updatedAt` и `approvedTermMonths`. Сохраните эти данные на фронтенде после создания
-или запросите справочники отдельно.
+`ApplicationResponse` теперь содержит компанию, продукт, цель, даты и одобренный срок.
+Для полной карточки компании используйте `GET /api/companies/lookup?inn=` или
+`GET /api/companies`, для полного продукта — `GET /api/products`.
 
 ### Шаг 3. Подписать согласия
 
@@ -341,6 +358,14 @@ GET /api/manager/applications/pending?page=0&size=20
   "items": [
     {
       "id": "<APPLICATION_ID>",
+      "company": {
+        "id": "<COMPANY_ID>",
+        "inn": "7704983159",
+        "ogrn": "1187746198342",
+        "name": "ООО «ТехноПрогресс»",
+        "category": "Малое",
+        "status": "active"
+      },
       "amount": 3000000,
       "score": 640,
       "grade": "B",
@@ -356,8 +381,7 @@ GET /api/manager/applications/pending?page=0&size=20
 }
 ```
 
-В очереди нет названия компании. Если оно нужно в UI, backend нужно доработать
-или хранить соответствие `applicationId -> companyId` на фронтенде после создания.
+`company` можно сразу показывать в очереди менеджера: название, ИНН и ОГРН уже в ответе.
 
 ### Вынести решение
 
@@ -450,7 +474,7 @@ POST /api/manager/dlq/{applicationId}/retry
 планировщик подхватит её в течение интервала (`30` секунд по умолчанию). После retry
 обновите DLQ и карточку заявки.
 
-## 7. Загрузка документов
+## 7. Документы
 
 Загрузка доступна только в статусе `NEEDS_MORE_INFO`.
 
@@ -475,8 +499,45 @@ file: <binary>
 После успешной загрузки заявка возвращается в `MANUAL_REVIEW`, в timeline появляется
 `DOCUMENT_UPLOADED`.
 
-Сейчас нет endpoint'ов для списка и скачивания документов. Если нужен экран «Мои документы»,
-backend нужно расширить.
+### Список документов
+
+```http
+GET /api/applications/{id}/documents
+```
+
+Ответ — массив `DocumentResponse`:
+
+```json
+[
+  {
+    "id": "<DOCUMENT_ID>",
+    "originalFileName": "statement.pdf",
+    "contentType": "application/pdf",
+    "sizeBytes": 123456,
+    "sha256": "a1b2c3...",
+    "uploadDate": "2026-10-24T01:00:00Z",
+    "downloadUrl": "/api/applications/<APPLICATION_ID>/documents/<DOCUMENT_ID>/download"
+  }
+]
+```
+
+Список доступен владельцу заявки и менеджеру в любом статусе заявки.
+
+### Скачивание документа
+
+```http
+GET /api/applications/{id}/documents/{documentId}/download
+```
+
+Ответ — бинарный файл с заголовками:
+
+```text
+Content-Type: application/pdf
+Content-Disposition: attachment; filename*=UTF-8''statement.pdf
+```
+
+На фронтенде используйте `fetch` с `Authorization` и создавайте blob URL, потому что
+обычная ссылка `<a href>` не передаст Basic Auth. Если файл не найден — `404 NOT_FOUND`.
 
 ## 8. Справочник эндпоинтов
 
@@ -842,6 +903,16 @@ SSE-поток. Подробности ниже.
 Ошибки: `400 BAD_REQUEST`, `400 FILE_TOO_LARGE`, `400 INVALID_MULTIPART`,
 `409 INVALID_STATE_TRANSITION`.
 
+#### `GET /api/applications/{id}/documents`
+
+Список документов заявки. Ответ — массив `DocumentResponse` (см. раздел 7).
+Ошибки: `403 FORBIDDEN`, `404 NOT_FOUND`.
+
+#### `GET /api/applications/{id}/documents/{documentId}/download`
+
+Скачивание файла. Ответ — бинарный поток (`application/pdf`, `image/jpeg` или `image/png`)
+с `Content-Disposition: attachment`. Ошибки: `403 FORBIDDEN`, `404 NOT_FOUND`.
+
 ### Менеджерские
 
 #### `GET /api/manager/applications/pending`
@@ -984,13 +1055,89 @@ data: {"status":"SCORING_COMPLETED","message":"Балл 640, грейд B"}
 {
   "id": "uuid",
   "status": "DRAFT",
+  "company": {
+    "id": "uuid",
+    "inn": "7704983159",
+    "ogrn": "1187746198342",
+    "name": "ООО «ТехноПрогресс»",
+    "category": "Малое",
+    "status": "active"
+  },
+  "product": {
+    "id": "uuid",
+    "name": "Оборотный кредит",
+    "baseRate": 22.0
+  },
   "requestedAmount": 3000000,
   "requestedTermMonths": 24,
+  "purpose": "Пополнение оборотных средств",
   "hasCollateral": false,
   "riskScore": null,
   "scoringDetails": null,
   "approvedAmount": null,
-  "rejectionReason": null
+  "approvedTermMonths": null,
+  "rejectionReason": null,
+  "createdAt": "2026-10-24T01:00:00Z",
+  "updatedAt": "2026-10-24T01:00:00Z"
+}
+```
+
+### `CompanySummary`
+
+```json
+{
+  "id": "uuid",
+  "inn": "7704983159",
+  "ogrn": "1187746198342",
+  "name": "ООО «ТехноПрогресс»",
+  "category": "Малое",
+  "status": "active"
+}
+```
+
+### `ProductSummary`
+
+```json
+{
+  "id": "uuid",
+  "name": "Оборотный кредит",
+  "baseRate": 22.0
+}
+```
+
+### `DocumentResponse`
+
+```json
+{
+  "id": "uuid",
+  "originalFileName": "statement.pdf",
+  "contentType": "application/pdf",
+  "sizeBytes": 123456,
+  "sha256": "a1b2c3...",
+  "uploadDate": "2026-10-24T01:00:00Z",
+  "downloadUrl": "/api/applications/<APPLICATION_ID>/documents/<DOCUMENT_ID>/download"
+}
+```
+
+### `ManagerPendingApplicationResponse`
+
+```json
+{
+  "id": "uuid",
+  "company": {
+    "id": "uuid",
+    "inn": "7704983159",
+    "ogrn": "1187746198342",
+    "name": "ООО «ТехноПрогресс»",
+    "category": "Малое",
+    "status": "active"
+  },
+  "amount": 3000000,
+  "score": 640,
+  "grade": "B",
+  "reason": "Высокая долговая нагрузка",
+  "createdAt": "2026-10-24T01:00:00Z",
+  "updatedAt": "2026-10-24T01:02:00Z"
 }
 ```
 
@@ -1045,12 +1192,9 @@ data: {"status":"SCORING_COMPLETED","message":"Балл 640, грейд B"}
 
 Это важно учесть при планировании фронтенда:
 
-- `ApplicationResponse` не содержит компанию, продукт, `purpose`, `createdAt`, `updatedAt`,
-  `approvedTermMonths`. Для карточки заявки этих данных не хватит; нужно расширение DTO
-  или отдельный агрегированный endpoint.
-- В очереди менеджера нет названия компании и ИНН.
-- Нет endpoint'ов для списка и скачивания документов.
 - Нет endpoint'ов редактирования, отмены и удаления заявки.
+- Документы можно загрузить, посмотреть и скачать, но OCR и автоматической проверки
+  содержимого нет.
 - Нет endpoint'а профиля пользователя и выхода.
 - Нет refresh-токенов; Basic Auth — демо-вариант.
 - `/sign` не выполняет реальный платёж, только меняет статус.
@@ -1072,6 +1216,7 @@ data: {"status":"SCORING_COMPLETED","message":"Балл 640, грейд B"}
 - [ ] Показывать `summary`, `reasons`, `nextSteps` из `/explanation`.
 - [ ] Сравнивать офферы по сумме, сроку, ставке, платежу и переплате.
 - [ ] Ограничить загрузку файлов: PDF/JPG/JPEG/PNG, до 10 МБ.
+- [ ] Показывать список документов и скачивать файл через `fetch` с Basic Auth.
 - [ ] После действий менеджера и клиента обновлять карточку вручную.
 - [ ] Не показывать менеджерские разделы клиенту.
 - [ ] Предусмотреть empty/loading/error states для списков и карточек.

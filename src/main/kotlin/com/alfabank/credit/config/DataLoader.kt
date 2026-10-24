@@ -12,6 +12,10 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.LocalDate
 
+
+//========= TEMPORARY CLASS TO LOAD AND MOCK DATA!!!!!!!!!!!!!!========
+
+
 @Component
 class DataLoader(
     private val companyRepository: CompanyRepository,

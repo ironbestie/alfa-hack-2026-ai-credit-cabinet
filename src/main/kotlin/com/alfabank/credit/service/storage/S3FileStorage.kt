@@ -1,5 +1,6 @@
 package com.alfabank.credit.service.storage
 
+import com.alfabank.credit.exception.NotFoundException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -8,6 +9,8 @@ import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import java.util.UUID
 
@@ -21,17 +24,11 @@ class S3FileStorage(
     private val log = LoggerFactory.getLogger(S3FileStorage::class.java)
 
     init {
-        try {
-            if (s3Client.listBuckets().buckets().none { it.name() == bucketName }) {
-                s3Client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build())
-                log.info("Bucket '$bucketName' created.")
-            }
-        } catch (e: Exception) {
-            log.warn("Could not create bucket on startup (MinIO might not be ready yet): ${e.message}")
-        }
+        ensureBucket()
     }
 
     override fun store(file: MultipartFile, applicationId: String): StoredDocument {
+        ensureBucket()
         val validated = documentValidator.validate(file)
         val key = "applications/$applicationId/${UUID.randomUUID()}.${validated.extension}"
 
@@ -62,6 +59,22 @@ class S3FileStorage(
         }
     }
 
+    override fun download(key: String): ByteArray {
+        return try {
+            s3Client.getObjectAsBytes(
+                GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .build()
+            ).asByteArray()
+        } catch (e: NoSuchKeyException) {
+            throw NotFoundException("Файл документа не найден в хранилище")
+        } catch (e: Exception) {
+            log.error("Failed to download file from S3: $key", e)
+            throw RuntimeException("Could not download document", e)
+        }
+    }
+
     override fun delete(key: String) {
         try {
             s3Client.deleteObject(
@@ -74,6 +87,17 @@ class S3FileStorage(
         } catch (e: Exception) {
             log.error("Failed to delete file from S3: $key", e)
             throw RuntimeException("Could not delete document", e)
+        }
+    }
+
+    private fun ensureBucket() {
+        try {
+            if (s3Client.listBuckets().buckets().none { it.name() == bucketName }) {
+                s3Client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build())
+                log.info("Bucket '$bucketName' created.")
+            }
+        } catch (e: Exception) {
+            log.warn("Could not create bucket (MinIO might not be ready yet): ${e.message}")
         }
     }
 }

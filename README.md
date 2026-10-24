@@ -15,6 +15,7 @@ Backend кредитного конвейера для малого и микр�
 - Автоматическое одобрение, контрпредложения и отказ.
 - Ручное рассмотрение менеджером: одобрение, контрпредложение, запрос документов, отказ.
 - Загрузка документов в MinIO/S3 с проверкой типа и сигнатуры файла.
+- Список и скачивание загруженных документов.
 - Живой трекер статусов через SSE и история событий (timeline).
 - Объяснение решения: факторы, следующие шаги и опциональное резюме от LLM.
 - Идемпотентность POST-запросов через `Idempotency-Key` и Redis.
@@ -103,6 +104,39 @@ listener/       слушатель события отправки заявки
 
 ## Быстрый запуск
 
+### Полный запуск в Docker
+
+```bash
+docker compose up --build
+```
+
+После старта:
+
+- API: <http://localhost:8080>
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
+- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
+- Моки: <http://localhost:8089>
+- MinIO Console: <http://localhost:9001> (`minioadmin` / `minioadmin`)
+
+Остановить:
+
+```bash
+docker compose down
+```
+
+Остановить и удалить данные PostgreSQL/MinIO:
+
+```bash
+docker compose down -v
+```
+
+Приложение собирается multi-stage `Dockerfile` (Maven + Java 21) и запускается
+в отдельном контейнере. PostgreSQL и Redis имеют healthcheck, поэтому приложение
+стартует после их готовности. MinIO и WireMock поднимаются параллельно; bucket
+создаётся приложением при первой загрузке документа.
+
+### Локальная разработка
+
 1. Поднять инфраструктуру:
 
 ```bash
@@ -121,15 +155,10 @@ docker compose up -d postgres redis mocks minio
 .\mvnw.cmd spring-boot:run
 ```
 
-- Swagger UI: <http://localhost:8080/swagger-ui.html>
-- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
-- Моки: <http://localhost:8089>
-- MinIO Console: <http://localhost:9001> (`minioadmin` / `minioadmin`)
-
-Dockerfile и Flyway-миграции добавляются отдельно. Схема БД создаётся Hibernate
-(`ddl-auto: update`). Если PostgreSQL уже создан старой версией приложения, для событий
-`CONSENT_SIGNED` и `DOCUMENT_UPLOADED` потребуется обновить check-constraint
-`application_events_event_type_check`.
+Схема БД создаётся Hibernate (`ddl-auto: update`). Если PostgreSQL уже создан
+старой версией приложения, для событий `CONSENT_SIGNED` и `DOCUMENT_UPLOADED`
+потребуется обновить check-constraint `application_events_event_type_check`.
+Flyway-миграции пока не добавлены.
 
 ## Авторизация
 
@@ -169,6 +198,8 @@ Basic Auth:
 | `GET` | `/api/applications/{id}/offers` | Предложения и контрпредложения |
 | `GET` | `/api/applications/{id}/explanation` | Объяснение решения |
 | `POST` | `/api/applications/{id}/documents` | Загрузить документ (multipart) |
+| `GET` | `/api/applications/{id}/documents` | Список документов заявки |
+| `GET` | `/api/applications/{id}/documents/{documentId}/download` | Скачать документ |
 | `POST` | `/api/applications/{id}/accept-offer` | Принять предложение |
 | `POST` | `/api/applications/{id}/sign` | Имитация подписания и выдачи |
 
@@ -276,7 +307,7 @@ ORDER BY updated_at DESC;
 ./mvnw test
 ```
 
-29 тестов, 0 failures/errors. Покрыты:
+32 теста, 0 failures/errors. Покрыты:
 
 - основные демо-ИНН;
 - границы DTI;
@@ -287,6 +318,7 @@ ORDER BY updated_at DESC;
 - resume с `SCORING`;
 - retry, DLQ и replay;
 - удаление S3-объекта после ошибки БД;
+- список и скачивание документов, включая проверку принадлежности заявке;
 - переход `SCORING -> MANUAL_REVIEW`;
 - интеграционный контекст с PostgreSQL и Redis через Testcontainers.
 
@@ -313,11 +345,11 @@ app:
 
 ## Ограничения
 
-- Flyway-миграции и Dockerfile не добавлены по условиям кейса.
+- Flyway-миграции не добавлены: схема создаётся Hibernate (`ddl-auto: update`).
 - На существующей PostgreSQL-базе может потребоваться обновить constraint `application_events_event_type_check`.
 - MinIO закреплён на amd64-образе; на ARM может потребоваться другая платформа.
 - Basic Auth — демонстрационный, без refresh-токенов и полноценного профиля пользователя.
 - `/sign` — имитация: реального платежа и подписания нет.
 - SSE не заменяет polling после действий менеджера и клиента: эти действия не всегда отправляют SSE-событие.
-- В `ApplicationResponse` нет названия компании, продукта, `purpose`, `createdAt`/`updatedAt` и `approvedTermMonths`. Для полноценного кабинета эти поля нужно добавить в DTO или отдавать отдельным агрегированным endpoint.
-- Нет endpoint'ов для списка/скачивания документов, редактирования и отмены заявки.
+- Документы сохраняются и отдаются как файлы, но их содержимое не распознаётся (OCR) и не проверяется автоматически.
+- Нет endpoint'ов редактирования, отмены и удаления заявки.

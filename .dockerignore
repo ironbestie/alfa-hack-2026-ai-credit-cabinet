@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+target
+build
+minio_data
+mocks
+*.docx
+*.pdf
+ссылка на чат.txt

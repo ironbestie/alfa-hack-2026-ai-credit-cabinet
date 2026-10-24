@@ -23,12 +23,19 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate # <-- Hibernate только проверяет схему
     show-sql: true
     properties:
       hibernate:
         format_sql: true
     open-in-view: false
+
+  # НАСТРОЙКИ FLYWAY
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
 
   data:
     redis:

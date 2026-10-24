@@ -10,6 +10,12 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alfa_admin -d alfa_credit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   minio:
     image: elestio/minio@sha256:e7ffdea1db8e1830237169cbc481d52604f68447ce35df8ed5062202c3e3dc29
@@ -32,6 +38,12 @@ services:
     container_name: alfa_credit_redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
 
   mocks:
     image: wiremock/wiremock:3.9.1
@@ -43,8 +55,11 @@ services:
     command: ["--verbose"]
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: alfa_credit_app
+    restart: on-failure
     ports:
       - "8080:8080"
     environment:
@@ -57,11 +72,21 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       APP_MOCKS_URL: http://mocks:8080
+      APP_AI_BASE_URL: ${APP_AI_BASE_URL:-http://host.docker.internal:11434}
+      APP_AI_API_KEY: ${APP_AI_API_KEY:-}
+      APP_AI_MODEL: ${APP_AI_MODEL:-qwen2.5:7b}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:4200}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      - postgres
-      - minio
-      - redis
-      - mocks
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      mocks:
+        condition: service_started
 
 volumes:
   pgdata:

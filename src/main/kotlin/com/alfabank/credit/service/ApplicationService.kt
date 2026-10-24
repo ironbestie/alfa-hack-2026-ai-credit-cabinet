@@ -151,7 +151,7 @@ class ApplicationService(
     }
 
     @Transactional(readOnly = true)
-    fun getPendingApplicationsForManager(page: Int, size: Int): PageResponse<Map<String, Any?>> {
+    fun getPendingApplicationsForManager(page: Int, size: Int): PageResponse<ManagerPendingApplicationResponse> {
         val pageable = PageResponse.pageable(page, size, Sort.by(Sort.Direction.ASC, "updatedAt"))
         val applications = applicationRepository.findByStatus(ApplicationStatus.MANUAL_REVIEW, pageable)
         return PageResponse.from(applications.map {
@@ -160,14 +160,15 @@ class ApplicationService(
             val reason = negativeFactors.take(2).joinToString("; ") { factor -> factor.label }
                 .ifBlank { it.rejectionReason ?: "Ручная проверка" }
 
-            mapOf(
-                "id" to it.id,
-                "amount" to it.requestedAmount,
-                "score" to it.riskScore,
-                "grade" to it.riskScore?.let { score -> gradeResolver.gradeFor(score) },
-                "reason" to reason,
-                "createdAt" to it.createdAt,
-                "updatedAt" to it.updatedAt
+            ManagerPendingApplicationResponse(
+                id = it.id!!,
+                company = it.company.toSummary(),
+                amount = it.requestedAmount,
+                score = it.riskScore,
+                grade = it.riskScore?.let { score -> gradeResolver.gradeFor(score) },
+                reason = reason,
+                createdAt = it.createdAt,
+                updatedAt = it.updatedAt
             )
         })
     }
@@ -334,13 +335,34 @@ class ApplicationService(
         return ApplicationResponse(
             id = application.id!!,
             status = application.status,
+            company = application.company.toSummary(),
+            product = application.product.toSummary(),
             requestedAmount = application.requestedAmount,
             requestedTermMonths = application.requestedTermMonths,
+            purpose = application.purpose,
             hasCollateral = application.hasCollateral,
             riskScore = application.riskScore,
             scoringDetails = application.scoringDetails,
             approvedAmount = application.approvedAmount,
-            rejectionReason = application.rejectionReason
+            approvedTermMonths = application.approvedTermMonths,
+            rejectionReason = application.rejectionReason,
+            createdAt = application.createdAt,
+            updatedAt = application.updatedAt
         )
     }
+
+    private fun Company.toSummary(): CompanySummary = CompanySummary(
+        id = id!!,
+        inn = inn,
+        ogrn = ogrn,
+        name = name,
+        category = category,
+        status = status
+    )
+
+    private fun CreditProduct.toSummary(): ProductSummary = ProductSummary(
+        id = id!!,
+        name = name,
+        baseRate = baseRate
+    )
 }

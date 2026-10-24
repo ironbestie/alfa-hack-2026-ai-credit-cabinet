@@ -1,6 +1,7 @@
 package com.alfabank.credit.api
 
 import com.alfabank.credit.dto.DeadLetterResponse
+import com.alfabank.credit.dto.ManagerPendingApplicationResponse
 import com.alfabank.credit.dto.PageResponse
 import com.alfabank.credit.service.ApplicationDecisionService
 import com.alfabank.credit.service.ApplicationService
@@ -33,7 +34,7 @@ class ManagerController(
     fun getPendingApplications(
         @Parameter(description = "Номер страницы (с 0)") @RequestParam(defaultValue = "0") page: Int,
         @Parameter(description = "Размер страницы (1-100)") @RequestParam(defaultValue = "20") size: Int
-    ): PageResponse<Map<String, Any?>> {
+    ): PageResponse<ManagerPendingApplicationResponse> {
         return applicationService.getPendingApplicationsForManager(page, size)
     }
 

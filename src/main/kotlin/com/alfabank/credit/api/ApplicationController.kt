@@ -2,6 +2,7 @@ package com.alfabank.credit.api
 
 import com.alfabank.credit.dto.ApplicationResponse
 import com.alfabank.credit.dto.CreateApplicationRequest
+import com.alfabank.credit.dto.DocumentResponse
 import com.alfabank.credit.dto.EventResponse
 import com.alfabank.credit.dto.ExplanationResponse
 import com.alfabank.credit.dto.OfferResponse
@@ -19,10 +20,16 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.core.io.ByteArrayResource
+import org.springframework.core.io.Resource
+import org.springframework.http.ContentDisposition
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 data class AcceptOfferRequest(val offerId: UUID? = null)
@@ -121,6 +128,49 @@ class ApplicationController(
     ): Map<String, String> {
         documentService.uploadDocument(id, file)
         return mapOf("message" to "Document uploaded")
+    }
+
+    @Operation(
+        summary = "Список документов заявки",
+        description = "Возвращает метаданные всех документов, загруженных по заявке. Доступно владельцу заявки и менеджеру."
+    )
+    @GetMapping("/{id}/documents")
+    fun listDocuments(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID
+    ): List<DocumentResponse> {
+        return documentService.listDocuments(id)
+    }
+
+    @Operation(
+        summary = "Скачать документ",
+        description = "Возвращает файл документа как вложение. Доступно владельцу заявки и менеджеру."
+    )
+    @ApiResponses(value = [
+        ApiResponse(
+            responseCode = "200",
+            description = "Файл документа",
+            content = [Content(
+                mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                schema = Schema(type = "string", format = "binary")
+            )]
+        ),
+        ApiResponse(responseCode = "404", description = "Заявка или документ не найдены")
+    ])
+    @GetMapping("/{id}/documents/{documentId}/download")
+    fun downloadDocument(
+        @Parameter(description = "UUID заявки") @PathVariable id: UUID,
+        @Parameter(description = "UUID документа") @PathVariable documentId: UUID
+    ): ResponseEntity<Resource> {
+        val document = documentService.downloadDocument(id, documentId)
+        val contentDisposition = ContentDisposition.attachment()
+            .filename(document.originalFileName, StandardCharsets.UTF_8)
+            .build()
+
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(document.contentType))
+            .contentLength(document.content.size.toLong())
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+            .body(ByteArrayResource(document.content))
     }
 
     @Operation(

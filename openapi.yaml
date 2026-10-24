@@ -230,6 +230,21 @@ paths:
                 $ref: '#/components/schemas/ExplanationResponse'
 
   /api/applications/{id}/documents:
+    get:
+      tags: [Applications]
+      summary: Список документов заявки
+      description: Возвращает метаданные всех документов, загруженных по заявке. Доступно владельцу заявки и менеджеру.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Документы заявки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentResponse'
     post:
       tags: [Applications]
       summary: Загрузить документ (дозапрос)
@@ -248,6 +263,25 @@ paths:
       responses:
         '200':
           description: Файл загружен
+
+  /api/applications/{id}/documents/{documentId}/download:
+    get:
+      tags: [Applications]
+      summary: Скачать документ
+      description: Возвращает файл документа как вложение. Доступно владельцу заявки и менеджеру.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Файл документа
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Заявка или документ не найдены
 
   /api/quiz/recommend:
     post:
@@ -445,6 +479,14 @@ components:
         type: string
         format: uuid
         example: "d1b42044-9499-43b9-9f95-02ff34fc0fda"
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: "a2c1b6d0-4e5f-4a7b-8c9d-0e1f2a3b4c5d"
     Page:
       name: page
       in: query
@@ -512,10 +554,17 @@ components:
         status:
           type: string
           enum: [DRAFT, ENRICHMENT, SCORING, DECISION, MANUAL_REVIEW, NEEDS_MORE_INFO, APPROVED, COUNTER_OFFER, REJECTED, SIGNING, FUNDED, CLOSED]
+        company:
+          $ref: '#/components/schemas/CompanySummary'
+        product:
+          $ref: '#/components/schemas/ProductSummary'
         requestedAmount:
           type: number
         requestedTermMonths:
           type: integer
+        purpose:
+          type: string
+          nullable: true
         hasCollateral:
           type: boolean
         riskScore:
@@ -528,9 +577,79 @@ components:
         approvedAmount:
           type: number
           nullable: true
+        approvedTermMonths:
+          type: integer
+          nullable: true
         rejectionReason:
           type: string
           nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CompanySummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        inn:
+          type: string
+          example: "7704983159"
+        ogrn:
+          type: string
+          example: "1187746198342"
+        name:
+          type: string
+          example: "ООО «ТехноПрогресс»"
+        category:
+          type: string
+          example: "Малое"
+        status:
+          type: string
+          example: "active"
+
+    ProductSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Оборотный кредит"
+        baseRate:
+          type: number
+          example: 22.0
+
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        originalFileName:
+          type: string
+          example: "statement.pdf"
+        contentType:
+          type: string
+          example: "application/pdf"
+        sizeBytes:
+          type: integer
+          format: int64
+          nullable: true
+        sha256:
+          type: string
+          nullable: true
+        uploadDate:
+          type: string
+          format: date-time
+        downloadUrl:
+          type: string
+          example: "/api/applications/d1b42044-9499-43b9-9f95-02ff34fc0fda/documents/a2c1b6d0-4e5f-4a7b-8c9d-0e1f2a3b4c5d/download"
 
     OfferResponse:
       type: object
@@ -710,6 +829,8 @@ components:
         id:
           type: string
           format: uuid
+        company:
+          $ref: '#/components/schemas/CompanySummary'
         amount:
           type: number
         score:
