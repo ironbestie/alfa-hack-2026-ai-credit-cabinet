@@ -4,6 +4,7 @@ Backend кредитного конвейера для малого и микр�
 решение, контрпредложения, ручное рассмотрение, загрузка документов и имитация выдачи.
 
 Подробный гид для фронтенд-разработчика: [BACKEND_FOR_FRONTEND.md](BACKEND_FOR_FRONTEND.md).
+Устройство базы данных и демо-данные: [docs/DATABASE.md](docs/DATABASE.md).
 
 ## Что умеет проект
 
@@ -155,10 +156,7 @@ docker compose up -d postgres redis mocks minio
 .\mvnw.cmd spring-boot:run
 ```
 
-Схема БД создаётся Hibernate (`ddl-auto: update`). Если PostgreSQL уже создан
-старой версией приложения, для событий `CONSENT_SIGNED` и `DOCUMENT_UPLOADED`
-потребуется обновить check-constraint `application_events_event_type_check`.
-Flyway-миграции пока не добавлены.
+Схема БД и демо-данные создаются миграциями Flyway при старте, Hibernate только проверяет схему (`ddl-auto: validate`). Таблицы, миграции и демо-заявки описаны в [docs/DATABASE.md](docs/DATABASE.md).
 
 ## Авторизация
 
@@ -301,6 +299,8 @@ ORDER BY updated_at DESC;
 | `7731497609` | ФНС временно недоступна, затем успех |
 | `7736150978` | Ликвидированная компания, стоп-фактор |
 
+Ещё семь клиентов и итоги по всем демо-заявкам описаны в [docs/DATABASE.md](docs/DATABASE.md).
+
 ## Тесты
 
 ```bash
@@ -345,8 +345,6 @@ app:
 
 ## Ограничения
 
-- Flyway-миграции не добавлены: схема создаётся Hibernate (`ddl-auto: update`).
-- На существующей PostgreSQL-базе может потребоваться обновить constraint `application_events_event_type_check`.
 - MinIO закреплён на amd64-образе; на ARM может потребоваться другая платформа.
 - Basic Auth — демонстрационный, без refresh-токенов и полноценного профиля пользователя.
 - `/sign` — имитация: реального платежа и подписания нет.
