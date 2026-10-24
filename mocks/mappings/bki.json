@@ -112,6 +112,160 @@
       }
     },
     {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '772584916321')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/772584916321.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '7703849263')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/7703849263.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '7709518363')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/7709518363.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '501274839072')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/501274839072.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '7715834021')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/7715834021.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '7720496138')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/7720496138.json"
+      }
+    },
+    {
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/bki/v1/reports",
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$[?(@.inn == '5047182637')]"
+          },
+          {
+            "matchesJsonPath": "$.consentId"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "bodyFileName": "bki/5047182637.json"
+      }
+    },
+    {
       "priority": 2,
       "request": {
         "method": "POST",
