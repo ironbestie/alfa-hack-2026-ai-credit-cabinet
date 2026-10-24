@@ -1,0 +1,23 @@
+{
+  "inn": "7720496138",
+  "ogrn": "1187746025170",
+  "type": "LEGAL",
+  "shortName": "ООО «ОптТоргСнаб»",
+  "fullName": "Общество с ограниченной ответственностью «ОптТоргСнаб»",
+  "status": "ACTIVE",
+  "registrationDate": "2018-01-20",
+  "okved": {
+    "code": "46.90",
+    "name": "Торговля оптовая неспециализированная"
+  },
+  "smeCategory": "SMALL",
+  "director": {
+    "fullName": "Кузнецов Игорь Владимирович",
+    "position": "Генеральный директор"
+  },
+  "address": "г. Москва, ул. Складочная, д. 6",
+  "flags": {
+    "massAddress": false,
+    "unreliableInfo": false
+  }
+}

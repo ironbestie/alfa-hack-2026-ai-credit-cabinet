@@ -1,0 +1,23 @@
+{
+  "inn": "7715834021",
+  "ogrn": "1267700192748",
+  "type": "LEGAL",
+  "shortName": "ООО «Квантум Софт»",
+  "fullName": "Общество с ограниченной ответственностью «Квантум Софт»",
+  "status": "ACTIVE",
+  "registrationDate": "2026-03-01",
+  "okved": {
+    "code": "62.02",
+    "name": "Деятельность консультативная и работы в области компьютерных технологий"
+  },
+  "smeCategory": "MICRO",
+  "director": {
+    "fullName": "Волков Дмитрий Андреевич",
+    "position": "Генеральный директор"
+  },
+  "address": "г. Москва, ул. Кодовая, д. 2",
+  "flags": {
+    "massAddress": false,
+    "unreliableInfo": false
+  }
+}

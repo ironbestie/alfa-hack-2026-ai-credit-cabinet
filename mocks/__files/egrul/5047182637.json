@@ -1,0 +1,23 @@
+{
+  "inn": "5047182637",
+  "ogrn": "1195040038269",
+  "type": "LEGAL",
+  "shortName": "ООО «ЛогистикПро»",
+  "fullName": "Общество с ограниченной ответственностью «ЛогистикПро»",
+  "status": "ACTIVE",
+  "registrationDate": "2019-05-10",
+  "okved": {
+    "code": "49.41",
+    "name": "Деятельность автомобильного грузового транспорта"
+  },
+  "smeCategory": "SMALL",
+  "director": {
+    "fullName": "Сидоров Алексей Петрович",
+    "position": "Генеральный директор"
+  },
+  "address": "Московская обл., г. Химки, Ленинградское ш., д. 30",
+  "flags": {
+    "massAddress": false,
+    "unreliableInfo": false
+  }
+}

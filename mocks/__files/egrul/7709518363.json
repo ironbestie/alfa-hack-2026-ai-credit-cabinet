@@ -1,0 +1,23 @@
+{
+  "inn": "7709518363",
+  "ogrn": "1217700583165",
+  "type": "LEGAL",
+  "shortName": "ООО «ГастроНомерОдин»",
+  "fullName": "Общество с ограниченной ответственностью «ГастроНомерОдин»",
+  "status": "ACTIVE",
+  "registrationDate": "2021-11-01",
+  "okved": {
+    "code": "56.10",
+    "name": "Деятельность ресторанов и услуги по доставке продуктов питания"
+  },
+  "smeCategory": "MICRO",
+  "director": {
+    "fullName": "Орлов Максим Игоревич",
+    "position": "Генеральный директор"
+  },
+  "address": "г. Москва, ул. Поварская, д. 21",
+  "flags": {
+    "massAddress": false,
+    "unreliableInfo": false
+  }
+}

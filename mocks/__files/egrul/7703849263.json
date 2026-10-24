@@ -1,0 +1,23 @@
+{
+  "inn": "7703849263",
+  "ogrn": "1207746103927",
+  "type": "LEGAL",
+  "shortName": "ООО «МедТехСервис»",
+  "fullName": "Общество с ограниченной ответственностью «МедТехСервис»",
+  "status": "ACTIVE",
+  "registrationDate": "2020-08-20",
+  "okved": {
+    "code": "86.21",
+    "name": "Общая врачебная практика"
+  },
+  "smeCategory": "SMALL",
+  "director": {
+    "fullName": "Новикова Елена Дмитриевна",
+    "position": "Генеральный директор"
+  },
+  "address": "г. Москва, ул. Клиническая, д. 9",
+  "flags": {
+    "massAddress": false,
+    "unreliableInfo": false
+  }
+}
