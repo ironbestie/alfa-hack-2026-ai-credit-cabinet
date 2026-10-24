@@ -1,0 +1,45 @@
+{
+  "inn": "7703849263",
+  "reportDate": "2026-10-25",
+  "activeLoans": [
+    {
+      "lender": "Банк 1",
+      "type": "TERM_LOAN",
+      "balance": 6000000,
+      "monthlyPayment": 260000,
+      "openedAt": "2024-03-15"
+    },
+    {
+      "lender": "Банк 3",
+      "type": "TERM_LOAN",
+      "balance": 4500000,
+      "monthlyPayment": 195000,
+      "openedAt": "2024-11-20"
+    },
+    {
+      "lender": "Лизинг 1",
+      "type": "LEASING",
+      "balance": 3000000,
+      "monthlyPayment": 110000,
+      "openedAt": "2025-04-05"
+    },
+    {
+      "lender": "Банк 4",
+      "type": "CREDIT_LINE",
+      "balance": 1500000,
+      "monthlyPayment": 45000,
+      "openedAt": "2025-10-01"
+    }
+  ],
+  "totalDebt": 15000000,
+  "monthlyDebtPayments": 610000,
+  "overdues": [
+    {
+      "days": 12,
+      "date": "2025-12-03",
+      "closed": true
+    }
+  ],
+  "maxOverdueDays24m": 12,
+  "inquiries30d": 2
+}

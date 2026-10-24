@@ -1,0 +1,18 @@
+{
+  "inn": "5047182637",
+  "reportDate": "2026-10-25",
+  "activeLoans": [
+    {
+      "lender": "Лизинг 1",
+      "type": "LEASING",
+      "balance": 5000000,
+      "monthlyPayment": 210000,
+      "openedAt": "2025-05-01"
+    }
+  ],
+  "totalDebt": 5000000,
+  "monthlyDebtPayments": 210000,
+  "overdues": [],
+  "maxOverdueDays24m": 0,
+  "inquiries30d": 1
+}

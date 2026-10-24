@@ -1,0 +1,31 @@
+{
+  "inn": "501274839072",
+  "reportDate": "2026-10-25",
+  "activeLoans": [
+    {
+      "lender": "Банк 3",
+      "type": "TERM_LOAN",
+      "balance": 1000000,
+      "monthlyPayment": 52000,
+      "openedAt": "2025-10-01"
+    },
+    {
+      "lender": "Банк 5",
+      "type": "TERM_LOAN",
+      "balance": 500000,
+      "monthlyPayment": 27000,
+      "openedAt": "2026-03-14"
+    }
+  ],
+  "totalDebt": 1500000,
+  "monthlyDebtPayments": 79000,
+  "overdues": [
+    {
+      "days": 10,
+      "date": "2026-05-18",
+      "closed": true
+    }
+  ],
+  "maxOverdueDays24m": 10,
+  "inquiries30d": 2
+}
