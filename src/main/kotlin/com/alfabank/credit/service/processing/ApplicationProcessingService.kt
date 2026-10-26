@@ -67,7 +67,7 @@ class ApplicationProcessingService(
         }
 
         val enrichment = scoringService.enrich(application)
-        if (application.status == ApplicationStatus.ENRICHMENT) {
+        if (application.status == ApplicationStatus.ENRICHMENT && enrichment.sourcesOk) {
             saveEvent(application, ApplicationEventType.DATA_ENRICHED, "Данные из ЕГРЮЛ, ФНС, БКИ и банка собраны")
         }
 

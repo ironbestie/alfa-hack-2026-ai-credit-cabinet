@@ -50,7 +50,7 @@ class ApplicationDecisionService(
         application.updatedAt = Instant.now()
         applicationRepository.save(application)
 
-        val description = selectedOffer?.let { "Клиент принял предложение ${it.type}" } ?: "Клиент принял предложение"
+        val description = selectedOffer?.let { "Клиент принял предложение: ${offerTitle(it.type)}" } ?: "Клиент принял предложение"
         eventService.saveEvent(
             application,
             ApplicationEventType.STATUS_CHANGED,
@@ -184,5 +184,13 @@ class ApplicationDecisionService(
         val grade = application.riskScore?.let { gradeResolver.gradeFor(it) }
         val surcharge = grade?.let { policy.grades[it]?.rateSurcharge } ?: 0.0
         return application.product.baseRate + surcharge
+    }
+
+    private fun offerTitle(type: String): String = when (type) {
+        "REQUESTED" -> "на запрошенных условиях"
+        "LIMIT" -> "меньшая сумма"
+        "GUARANTEE" -> "с поручительством Корпорации МСП"
+        "COLLATERAL" -> "с залогом"
+        else -> type
     }
 }

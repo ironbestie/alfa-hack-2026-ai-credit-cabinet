@@ -16,7 +16,8 @@ data class OfferResponse(
 data class ExplanationResponse(
     val summary: String,
     val reasons: List<String>,
-    val nextSteps: List<String>
+    val nextSteps: List<String>,
+    val generatedByAi: Boolean = false
 )
 
 data class PreapprovedOfferResponse(

@@ -157,8 +157,8 @@ class ApplicationService(
         return PageResponse.from(applications.map {
             val factors = scoringDetailsCodec.decode(it.scoringDetails)
             val negativeFactors = factors.filter { factor -> factor.points < 0 }.sortedBy { factor -> factor.points }
-            val reason = negativeFactors.take(2).joinToString("; ") { factor -> factor.label }
-                .ifBlank { it.rejectionReason ?: "Ручная проверка" }
+            val reason = it.rejectionReason
+                ?: negativeFactors.take(2).joinToString("; ") { factor -> factor.label }.ifBlank { "Ручная проверка" }
 
             ManagerPendingApplicationResponse(
                 id = it.id!!,
@@ -192,11 +192,14 @@ class ApplicationService(
         val nextSteps = buildNextSteps(application, factors)
         val fallback = buildFallbackExplanation(application, reasons)
         val factsForAi = buildString {
-            append("Статус заявки: ${application.status}. ")
+            append("Статус заявки: ${statusForClient(application.status)}. ")
             append("Балл: ${application.riskScore ?: "не рассчитан"}. ")
             application.riskScore?.let { append("Грейд: ${gradeResolver.gradeFor(it)}. ") }
             append("Запрошенная сумма: ${application.requestedAmount.toPlainString()} ₽. ")
-            application.approvedAmount?.let { append("Одобренная сумма: ${it.toPlainString()} ₽. ") }
+            application.approvedAmount?.let {
+                val label = if (application.status == ApplicationStatus.COUNTER_OFFER) "Сумма без залога в пределах лимита" else "Одобренная сумма"
+                append("$label: ${it.toPlainString()} ₽. ")
+            }
             append("Главные причины: ${reasons.joinToString(", ")}. ")
             append("Следующие шаги: ${nextSteps.joinToString(", ")}.")
         }
@@ -205,12 +208,13 @@ class ApplicationService(
                 "(1-2 предложения). Не используй сложные банковские термины и не добавляй числа, которых нет в данных. " +
                 "Данные: $factsForAi"
 
-        val aiSummary = aiAssistantClient.generateExplanation(prompt, fallback)
+        val aiSummary = aiAssistantClient.tryGenerate(prompt)
 
         return ExplanationResponse(
-            summary = aiSummary,
+            summary = aiSummary ?: fallback,
             reasons = reasons,
-            nextSteps = nextSteps
+            nextSteps = nextSteps,
+            generatedByAi = aiSummary != null
         )
     }
 
@@ -277,8 +281,13 @@ class ApplicationService(
         if ("R01" in codes || "R05" in codes) {
             steps += "Сократите долговую нагрузку: погасите часть действующих кредитов."
         }
-        if ("R02" in codes) {
-            steps += "Закройте просроченную задолженность — это самый важный фактор для банка."
+        val overdue = factors.firstOrNull { it.code == "R02" }
+        if (overdue != null) {
+            steps += if (overdue.points <= SERIOUS_OVERDUE_POINTS) {
+                "Закройте просроченную задолженность: это самый важный фактор для банка."
+            } else {
+                "Платите по кредитам вовремя: даже короткие просрочки снижают оценку."
+            }
         }
         if ("R03" in codes) {
             steps += "Кредитная история ещё короткая. Вернитесь через 3 месяца: лимит пересчитается автоматически."
@@ -365,4 +374,19 @@ class ApplicationService(
         name = name,
         baseRate = baseRate
     )
+
+    private fun statusForClient(status: ApplicationStatus): String = when (status) {
+        ApplicationStatus.APPROVED -> "одобрена"
+        ApplicationStatus.COUNTER_OFFER -> "есть встречное предложение"
+        ApplicationStatus.REJECTED -> "отказ"
+        ApplicationStatus.MANUAL_REVIEW -> "на проверке у специалиста"
+        ApplicationStatus.NEEDS_MORE_INFO -> "нужны документы"
+        ApplicationStatus.SIGNING -> "ждёт подписания"
+        ApplicationStatus.FUNDED -> "кредит выдан"
+        else -> "на рассмотрении"
+    }
+
+    companion object {
+        private const val SERIOUS_OVERDUE_POINTS = -100
+    }
 }

@@ -23,7 +23,10 @@ class AiAssistantClient(
         })
         .build()
 
-    fun generateExplanation(prompt: String, fallback: String = DEFAULT_FALLBACK): String {
+    fun generateExplanation(prompt: String, fallback: String = DEFAULT_FALLBACK): String =
+        tryGenerate(prompt) ?: fallback
+
+    fun tryGenerate(prompt: String): String? {
         return try {
             val request = mapOf(
                 "model" to model,
@@ -52,29 +55,30 @@ class AiAssistantClient(
                 ?.get("content") as? String
 
             if (content.isNullOrBlank() || !numbersAreGrounded(content, prompt)) {
-                log.warn("ИИ вернул пустой ответ или числа, которых нет во входных данных. Используем шаблон.")
-                fallback
+                log.warn("ИИ вернул пустой ответ или числа, которых нет во входных данных. Используем шаблон. Ответ: {}", content?.take(300))
+                null
             } else {
                 content.trim()
             }
         } catch (e: Exception) {
             log.warn("ИИ недоступен: ${e.message}. Используем шаблон.")
-            fallback
+            null
         }
     }
 
     private fun numbersAreGrounded(answer: String, facts: String): Boolean {
-        val factNumbers = NUMBER_REGEX.findAll(facts)
-            .map { it.value.replace(',', '.') }
-            .toSet()
-        val answerNumbers = NUMBER_REGEX.findAll(answer)
-            .map { it.value.replace(',', '.') }
-            .toSet()
-        return answerNumbers.all { it in factNumbers }
+        val factNumbers = numbersIn(facts)
+        return numbersIn(answer).all { it in factNumbers }
     }
+
+    private fun numbersIn(text: String): Set<java.math.BigDecimal> =
+        NUMBER_REGEX.findAll(text.replace(DIGIT_GROUP_SPACE, ""))
+            .mapNotNull { it.value.replace(',', '.').toBigDecimalOrNull()?.stripTrailingZeros() }
+            .toSet()
 
     companion object {
         private val NUMBER_REGEX = Regex("\\d+(?:[.,]\\d+)?")
+        private val DIGIT_GROUP_SPACE = Regex("(?<=\\d)[\\s\\u00A0\\u202F](?=\\d{3}\\b)")
         private const val SYSTEM_PROMPT =
             "Ты — вежливый банковский ассистент. Пиши по-русски, кратко и понятно. " +
                     "Не придумывай суммы, сроки, ставки и другие числа."

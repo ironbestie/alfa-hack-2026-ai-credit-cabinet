@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import java.util.Locale
 
 @Service
 class DecisionService(
@@ -39,7 +40,7 @@ class DecisionService(
         if (input.requestedAmount > policy.manualReviewOver) {
             return DecisionOutcome(
                 "MANUAL_REVIEW",
-                "Сумма заявки больше ${policy.manualReviewOver.toPlainString()} ₽. Нужна ручная проверка."
+                "Сумма заявки больше ${"%,d".format(Locale.US, policy.manualReviewOver.toBigInteger()).replace(',', ' ')} ₽. Нужна ручная проверка."
             )
         }
 
