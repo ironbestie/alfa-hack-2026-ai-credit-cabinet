@@ -1,13 +1,18 @@
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS build
 
 WORKDIR /workspace
 
 COPY pom.xml .
 COPY src ./src
 
-RUN mvn -q -Dmaven.test.skip=true package
+# Кэш зависимостей Maven между сборками. --mount работает в BuildKit (Docker Desktop/Compose по умолчанию).
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp -Dmaven.test.skip=true \
+        -Dmaven.wagon.http.retryHandler.count=5 \
+        -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 \
+        package
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99
 
 WORKDIR /app
 

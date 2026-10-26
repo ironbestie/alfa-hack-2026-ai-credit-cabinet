@@ -7,6 +7,10 @@ target
 build
 minio_data
 mocks
+web
+docs
+scripts
+*.log
 *.docx
 *.pdf
 ссылка на чат.txt

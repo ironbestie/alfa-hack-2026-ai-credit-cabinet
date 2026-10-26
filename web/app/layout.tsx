@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   description: "Кредиты для малого и среднего бизнеса онлайн",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="ru"

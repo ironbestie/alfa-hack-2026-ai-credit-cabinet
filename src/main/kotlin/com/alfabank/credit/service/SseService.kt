@@ -16,6 +16,17 @@ class SseService {
         emitter.onTimeout { removeEmitter(applicationId, emitter) }
         emitter.onError { removeEmitter(applicationId, emitter) }
 
+        // Сразу подтверждаем подписку, чтобы клиент и прокси (Next.js) не держали соединение «молча».
+        try {
+            emitter.send(
+                SseEmitter.event()
+                    .name("connected")
+                    .data(mapOf("status" to "CONNECTED", "message" to "stream opened"))
+            )
+        } catch (e: Exception) {
+            removeEmitter(applicationId, emitter)
+        }
+
         return emitter
     }
 
