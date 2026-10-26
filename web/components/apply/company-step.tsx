@@ -2,35 +2,44 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
 import { useFormContext } from "react-hook-form";
-import { lookupCompany } from "@/api/companies";
+import { findCompanyByInn, lookupCompany } from "@/api/companies";
 import { ApiError } from "@/api/http";
-import type { CompanyLookup } from "@/api/types";
+import type { Company } from "@/api/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatDate, pluralize, yearsSince } from "@/lib/format";
+import { TEST_INNS } from "@/mocks/data";
+import { formatDate, formatRubShort, pluralize, yearsSince } from "@/lib/format";
 import type { ApplyValues } from "./schema";
 
 type CompanyStepProps = {
-  company: CompanyLookup | null;
-  onCompanyChange: (company: CompanyLookup | null) => void;
+  company: Company | null;
+  onCompanyChange: (company: Company | null) => void;
   onNext: () => void;
 };
 
+type LookupResult = { company: Company | null; okved: string };
+
+const demoInns = [
+  { inn: TEST_INNS.approved, label: "одобрение" },
+  { inn: TEST_INNS.counterOffer, label: "контрпредложение" },
+  { inn: TEST_INNS.rejected, label: "отказ" },
+  { inn: TEST_INNS.manualReview, label: "к специалисту" },
+];
+
 export function CompanyStep({ company, onCompanyChange, onNext }: CompanyStepProps) {
-  const { register, trigger, getValues, formState } = useFormContext<ApplyValues>();
-  const [manual, setManual] = useState(false);
+  const { register, trigger, getValues, setValue, formState } = useFormContext<ApplyValues>();
 
   const lookup = useMutation({
-    mutationFn: lookupCompany,
-    onSuccess: (data) => {
-      setManual(false);
-      onCompanyChange(data);
+    mutationFn: async (inn: string): Promise<LookupResult> => {
+      const egrul = await lookupCompany(inn);
+      const client = await findCompanyByInn(inn);
+      return { company: client, okved: egrul.okved };
     },
+    onSuccess: (data) => onCompanyChange(data.company),
     onError: () => onCompanyChange(null),
   });
 
@@ -40,9 +49,16 @@ export function CompanyStep({ company, onCompanyChange, onNext }: CompanyStepPro
     lookup.mutate(getValues("inn"));
   }
 
+  function pickDemo(inn: string) {
+    setValue("inn", inn, { shouldValidate: true });
+    search();
+  }
+
   const innField = register("inn", { onChange: () => lookup.reset() });
-  const serviceDown = lookup.error instanceof ApiError && lookup.error.status >= 500;
-  const notFound = lookup.error instanceof ApiError && lookup.error.status === 404;
+  const error = lookup.error instanceof ApiError ? lookup.error : null;
+  const notFound = error?.status === 404;
+  const serviceDown = !!lookup.error && !notFound;
+  const notClient = lookup.isSuccess && !lookup.data.company;
   const liquidated = company?.status === "liquidated";
 
   return (
@@ -81,6 +97,20 @@ export function CompanyStep({ company, onCompanyChange, onNext }: CompanyStepPro
       </form>
       {formState.errors.inn && <p className="text-sm text-destructive">{formState.errors.inn.message}</p>}
 
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-hand text-xl text-muted-foreground">для демо:</span>
+        {demoInns.map((demo) => (
+          <button
+            key={demo.inn}
+            type="button"
+            onClick={() => pickDemo(demo.inn)}
+            className="rounded-full border border-border px-3 py-1 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          >
+            {demo.inn} · {demo.label}
+          </button>
+        ))}
+      </div>
+
       {lookup.isPending && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
@@ -91,28 +121,33 @@ export function CompanyStep({ company, onCompanyChange, onNext }: CompanyStepPro
       {notFound && (
         <Alert>
           <TriangleAlert />
-          <AlertTitle>Компания не найдена</AlertTitle>
-          <AlertDescription>Проверьте ИНН. Если всё верно, введите данные вручную.</AlertDescription>
+          <AlertTitle>Компания не найдена в ЕГРЮЛ</AlertTitle>
+          <AlertDescription>Проверьте ИНН: возможно, в нём опечатка.</AlertDescription>
         </Alert>
       )}
 
-      {serviceDown && !manual && (
+      {serviceDown && (
         <Alert>
           <TriangleAlert />
-          <AlertTitle>Сервис ФНС сейчас не отвечает</AlertTitle>
+          <AlertTitle>Сервис проверки сейчас не отвечает</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-3">
-            <span>Данные можно ввести вручную, заявка не потеряется.</span>
-            <Button size="sm" variant="outline" onClick={() => setManual(true)}>
-              Ввести вручную
-            </Button>
-            <Button size="sm" variant="ghost" onClick={search}>
+            <span>{lookup.error?.message}. Данные не потеряются, попробуйте через минуту.</span>
+            <Button size="sm" variant="outline" onClick={search}>
               Проверить ещё раз
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {manual && <ManualCompanyForm inn={getValues("inn")} onRetry={search} />}
+      {notClient && (
+        <Alert>
+          <TriangleAlert />
+          <AlertTitle>Компания пока не обслуживается в банке</AlertTitle>
+          <AlertDescription>
+            Онлайн-кредит доступен действующим клиентам. Откройте расчётный счёт, и через пару дней лимит появится здесь.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {company && liquidated && (
         <Alert variant="destructive">
@@ -122,35 +157,31 @@ export function CompanyStep({ company, onCompanyChange, onNext }: CompanyStepPro
         </Alert>
       )}
 
-      {company && !liquidated && (
+      {company && !liquidated && lookup.data && (
         <>
-          <CompanyCard company={company} />
-          <div className="flex flex-wrap gap-3">
-            <Button className="h-11 rounded-xl px-6 font-semibold" onClick={onNext}>
-              Всё верно, дальше
-            </Button>
-            <Button variant="outline" className="h-11 rounded-xl px-6" onClick={() => setManual(true)}>
-              Исправить вручную
-            </Button>
-          </div>
+          <CompanyCard company={company} okved={lookup.data.okved} />
+          <Button className="h-11 rounded-xl px-6 font-semibold" onClick={onNext}>
+            Всё верно, дальше
+          </Button>
         </>
       )}
     </div>
   );
 }
 
-function CompanyCard({ company }: { company: CompanyLookup }) {
+function CompanyCard({ company, okved }: { company: Company; okved: string }) {
   const years = yearsSince(company.registrationDate);
   const rows = [
     ["ОГРН", company.ogrn],
     ["Руководитель", company.directorName],
-    ["ОКВЭД", [company.okved, company.okvedDescription].filter(Boolean).join(" · ")],
+    ["ОКВЭД", okved],
     [
       "Зарегистрирована",
       `${formatDate(company.registrationDate)} (${years} ${pluralize(years, "год", "года", "лет")})`,
     ],
     ["Категория", company.category],
-  ].filter(([, value]) => value);
+    ["Выручка за год", formatRubShort(company.annualRevenue)],
+  ];
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
@@ -167,40 +198,6 @@ function CompanyCard({ company }: { company: CompanyLookup }) {
           </div>
         ))}
       </dl>
-    </div>
-  );
-}
-
-function ManualCompanyForm({ inn, onRetry }: { inn: string; onRetry: () => void }) {
-  return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-      <div>
-        <h3 className="font-semibold">Данные компании</h3>
-        <p className="text-sm text-muted-foreground">
-          Сохраним черновик и отправим заявку, как только ФНС ответит.
-        </p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="manual-inn">ИНН</Label>
-          <Input id="manual-inn" value={inn} readOnly />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="manual-name">Название</Label>
-          <Input id="manual-name" placeholder="ООО «Ромашка»" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="manual-ogrn">ОГРН</Label>
-          <Input id="manual-ogrn" inputMode="numeric" maxLength={15} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="manual-director">Руководитель</Label>
-          <Input id="manual-director" />
-        </div>
-      </div>
-      <Button variant="outline" onClick={onRetry}>
-        Проверить в ФНС ещё раз
-      </Button>
     </div>
   );
 }

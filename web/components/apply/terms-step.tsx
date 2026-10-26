@@ -2,18 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
-import { useFormContext, useWatch } from "react-hook-form";
+import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { getPreapprovedOffer } from "@/api/offers";
 import type { CreditProduct } from "@/api/types";
 import { RangeField } from "@/components/range-field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { calculateLoan } from "@/lib/credit";
 import { formatRate, formatRub, formatRubShort } from "@/lib/format";
 import type { ApplyValues } from "./schema";
 
-export function TermsStep({ product }: { product: CreditProduct }) {
+export function TermsStep({ product, inn }: { product: CreditProduct; inn: string }) {
   const { control, setValue } = useFormContext<ApplyValues>();
-  const [inn, amount, termMonths] = useWatch({ control, name: ["inn", "amount", "termMonths"] });
+  const [amount, termMonths] = useWatch({ control, name: ["amount", "termMonths"] });
 
   const offer = useQuery({
     queryKey: ["offer", "preapproved", inn],
@@ -61,6 +62,22 @@ export function TermsStep({ product }: { product: CreditProduct }) {
           <dd className="font-heading text-2xl font-semibold">≈ {formatRub(overpayment)}</dd>
         </div>
       </dl>
+
+      <Controller
+        control={control}
+        name="hasCollateral"
+        render={({ field }) => (
+          <label className="flex cursor-pointer items-start justify-between gap-4 rounded-xl border border-border bg-card p-4">
+            <span>
+              <span className="block font-medium">Есть залог</span>
+              <span className="text-sm text-muted-foreground">
+                Недвижимость, транспорт или оборудование. С залогом проще получить всю сумму.
+              </span>
+            </span>
+            <Switch checked={field.value} onCheckedChange={field.onChange} />
+          </label>
+        )}
+      />
 
       {overLimit && (
         <Alert>

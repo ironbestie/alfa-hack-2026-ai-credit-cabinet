@@ -1,47 +1,48 @@
-import type { CompanyLookup, CreditProduct, LoanPurpose } from "@/api/types";
+import type { Company, CreditProduct, LoanPurpose } from "@/api/types";
 
-export type MockOutcome = "APPROVED" | "COUNTER_OFFER" | "REJECTED" | "MANUAL_REVIEW";
+export type MockOutcome = "APPROVED" | "COUNTER_OFFER" | "REJECTED" | "MANUAL_REVIEW" | "FNS_RETRY" | "LIQUIDATED";
 
-export type MockCompany = CompanyLookup & {
-  id: string;
-  annualRevenue: number;
-  totalDebt: number;
-  taxDebt: number;
-  outcome: MockOutcome;
-};
+export type MockCompany = Company & { outcome: MockOutcome };
 
 export const TEST_INNS = {
-  approved: "7707083893",
-  counterOffer: "7712345671",
-  rejected: "7710140679",
-  liquidated: "7720000007",
-  egrulDown: "7730000006",
+  approved: "7704983159",
+  counterOffer: "7703168426",
+  rejected: "7729501760",
+  manualReview: "7722085341",
+  fnsRetry: "7731497609",
+  liquidated: "7736150978",
 } as const;
 
+function company(
+  n: number,
+  data: Omit<MockCompany, "id">,
+): MockCompany {
+  return { id: `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`, ...data };
+}
+
 export const companies: MockCompany[] = [
-  {
-    id: "5b0d6c1e-7f3a-4f7e-9d43-1a2b3c4d5e01",
+  company(1, {
     inn: TEST_INNS.approved,
-    ogrn: "1027700132195",
+    ogrn: "1187746198342",
     name: "ООО «ТехноПрогресс»",
     okved: "62.01",
-    okvedDescription: "Разработка компьютерного программного обеспечения",
+    okvedDescription: "Разработка компьютерного ПО",
     directorName: "Иванов Иван Иванович",
     registrationDate: "2018-03-15",
-    category: "Малое предприятие",
+    category: "Малое",
     status: "active",
     annualRevenue: 50_000_000,
     totalDebt: 5_000_000,
     taxDebt: 0,
+    bankRelationshipMonths: 36,
     outcome: "APPROVED",
-  },
-  {
-    id: "5b0d6c1e-7f3a-4f7e-9d43-1a2b3c4d5e02",
+  }),
+  company(2, {
     inn: TEST_INNS.counterOffer,
-    ogrn: "1167746123456",
+    ogrn: "1227700512764",
     name: "ООО «Хлебный двор»",
     okved: "10.71",
-    okvedDescription: "Производство хлеба и хлебобулочных изделий",
+    okvedDescription: "Производство хлеба",
     directorName: "Ковалёва Мария Сергеевна",
     registrationDate: "2022-03-12",
     category: "Микропредприятие",
@@ -49,15 +50,15 @@ export const companies: MockCompany[] = [
     annualRevenue: 15_000_000,
     totalDebt: 9_300_000,
     taxDebt: 0,
+    bankRelationshipMonths: 24,
     outcome: "COUNTER_OFFER",
-  },
-  {
-    id: "5b0d6c1e-7f3a-4f7e-9d43-1a2b3c4d5e03",
+  }),
+  company(3, {
     inn: TEST_INNS.rejected,
-    ogrn: "1157746123456",
+    ogrn: "1257700384193",
     name: "ООО «СтройМаркет»",
     okved: "41.20",
-    okvedDescription: "Строительство жилых и нежилых зданий",
+    okvedDescription: "Строительство жилых зданий",
     directorName: "Петров Пётр Петрович",
     registrationDate: "2025-11-01",
     category: "Микропредприятие",
@@ -65,29 +66,62 @@ export const companies: MockCompany[] = [
     annualRevenue: 5_000_000,
     totalDebt: 4_000_000,
     taxDebt: 150_000,
+    bankRelationshipMonths: 8,
     outcome: "REJECTED",
-  },
-  {
-    id: "5b0d6c1e-7f3a-4f7e-9d43-1a2b3c4d5e04",
+  }),
+  company(4, {
+    inn: TEST_INNS.manualReview,
+    ogrn: "1217700446930",
+    name: "ООО «Северный ветер»",
+    okved: "46.39",
+    okvedDescription: "Неспециализированная оптовая торговля пищевыми продуктами",
+    directorName: "Соколов Андрей Викторович",
+    registrationDate: "2021-04-20",
+    category: "Малое",
+    status: "active",
+    annualRevenue: 30_000_000,
+    totalDebt: 6_000_000,
+    taxDebt: 0,
+    bankRelationshipMonths: 18,
+    outcome: "MANUAL_REVIEW",
+  }),
+  company(5, {
+    inn: TEST_INNS.fnsRetry,
+    ogrn: "1197746022814",
+    name: "ООО «Лесная поляна»",
+    okved: "55.10",
+    okvedDescription: "Деятельность гостиниц и прочих мест для временного проживания",
+    directorName: "Белова Ольга Николаевна",
+    registrationDate: "2019-06-03",
+    category: "Микропредприятие",
+    status: "active",
+    annualRevenue: 12_000_000,
+    totalDebt: 3_000_000,
+    taxDebt: 0,
+    bankRelationshipMonths: 0,
+    outcome: "FNS_RETRY",
+  }),
+  company(6, {
     inn: TEST_INNS.liquidated,
-    ogrn: "1107746000001",
-    name: "ООО «Закрытый проект»",
-    okved: "47.19",
-    okvedDescription: "Прочая розничная торговля",
-    directorName: "Сидоров Сергей Олегович",
-    registrationDate: "2010-06-01",
+    ogrn: "1177746281052",
+    name: "ООО «Старый склад»",
+    okved: "52.10",
+    okvedDescription: "Деятельность по складированию и хранению",
+    directorName: "Сидоров Олег Павлович",
+    registrationDate: "2017-02-10",
     category: "Микропредприятие",
     status: "liquidated",
-    annualRevenue: 0,
-    totalDebt: 0,
+    annualRevenue: 8_000_000,
+    totalDebt: 2_000_000,
     taxDebt: 0,
-    outcome: "REJECTED",
-  },
+    bankRelationshipMonths: 0,
+    outcome: "LIQUIDATED",
+  }),
 ];
 
 export const products: CreditProduct[] = [
   {
-    id: "8e1f2a3b-0000-4000-8000-000000000001",
+    id: "10000000-0000-0000-0000-000000000001",
     name: "Оборотный кредит",
     description: "Лучше всего под закупку товара и пополнение оборотных средств",
     minAmount: 100_000,
@@ -98,7 +132,7 @@ export const products: CreditProduct[] = [
     tags: '["Без залога", "Онлайн"]',
   },
   {
-    id: "8e1f2a3b-0000-4000-8000-000000000002",
+    id: "10000000-0000-0000-0000-000000000002",
     name: "Овердрафт",
     description: "Для краткосрочных кассовых разрывов",
     minAmount: 100_000,
@@ -109,7 +143,7 @@ export const products: CreditProduct[] = [
     tags: '["Без залога", "Возобновляемый"]',
   },
   {
-    id: "8e1f2a3b-0000-4000-8000-000000000003",
+    id: "10000000-0000-0000-0000-000000000003",
     name: "Инвестиционный кредит",
     description: "На покупку оборудования и транспорта",
     minAmount: 500_000,
@@ -120,7 +154,7 @@ export const products: CreditProduct[] = [
     tags: '["С залогом"]',
   },
   {
-    id: "8e1f2a3b-0000-4000-8000-000000000004",
+    id: "10000000-0000-0000-0000-000000000004",
     name: "Кредит с господдержкой",
     description: "Поручительство Корпорации МСП",
     minAmount: 100_000,

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { ApiError } from "@/api/http";
 import { getPreapprovedOffer } from "@/api/offers";
 import type { ConfidenceLevel } from "@/api/types";
 import { buttonVariants } from "@/components/ui/button";
@@ -37,7 +38,9 @@ export function OfferCard() {
     enabled: !!inn,
   });
 
-  if (!inn) {
+  const unknownCompany = offer.error instanceof ApiError && offer.error.status === 404;
+
+  if (!inn || unknownCompany) {
     return (
       <Frame>
         <div className="space-y-2">
@@ -102,6 +105,9 @@ export function OfferCard() {
           <p className="font-heading text-4xl font-bold">до {formatRub(data.maxAmount)}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Ставка от {formatRate(data.interestRate)} · до {formatMonths(data.termMonths)}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Платёж ≈ {formatRub(data.monthlyPayment)} в месяц, переплата ≈ {formatRub(data.overpayment)}
           </p>
         </div>
         <ol className="grid grid-cols-3 gap-1" aria-label="Уровень уверенности">
