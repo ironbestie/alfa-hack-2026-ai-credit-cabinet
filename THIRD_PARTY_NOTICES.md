@@ -47,6 +47,22 @@
 *   **Qwen2.5-7B-Instruct** (Apache License 2.0) — локальная языковая модель с открытыми весами, используемая для генерации объяснений решений (функция H3) и резюме для менеджера.
     *   *Примечание:* В случае недоступности модели или превышения таймаута, система использует заранее подготовленный шаблонный текст (Fallback), чтобы основной сценарий не прерывался.
 
-## 7. Данные
+## 7. Фронтенд (веб-кабинет)
+
+*   **Node.js 24** (MIT License) — среда сборки и запуска веб-кабинета.
+*   **Next.js 16.4** (MIT License) — фреймворк веб-приложения, проксирует `/api/*` на бэкенд.
+*   **React 19.3 / React DOM** (MIT License) — библиотека интерфейса.
+*   **TypeScript 5** (Apache License 2.0) — язык фронтенда.
+*   **Tailwind CSS 4** (MIT License) — стили.
+*   **shadcn/ui 4.22** (MIT License) и **Base UI 1.9** (MIT License) — компоненты интерфейса.
+*   **TanStack Query 5** (MIT License) — запросы к API, кэш, опрос статусов.
+*   **React Hook Form 7** (MIT License) и **Zod 4** (MIT License) — формы и валидация.
+*   **Lucide** (ISC License) — иконки.
+*   **Sonner 2** (MIT License) — всплывающие уведомления.
+*   **class-variance-authority** (Apache License 2.0), **cn** (MIT License), **tw-animate-css** (MIT License), **next-themes** (MIT License) — вспомогательные утилиты стилей.
+*   **openapi-typescript 7** (MIT License) — генерация типов из OpenAPI (только для разработки).
+*   **Шрифты Google Fonts:** Roboto (Apache License 2.0), Nunito, Playfair Display, Caveat (SIL Open Font License 1.1). Подключаются через `next/font` и раздаются самим приложением.
+
+## 8. Данные
 
 Все данные, используемые в прототипе (компании, ИНН, финансовые показатели, кредитные истории), являются **синтетическими** и сгенерированы исключительно для демонстрационных целей. Любые совпадения с реальными организациями случайны.
