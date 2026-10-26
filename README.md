@@ -6,6 +6,9 @@
 
 Подробный гид для фронтенд-разработчика: [BACKEND_FOR_FRONTEND.md](BACKEND_FOR_FRONTEND.md).
 Устройство базы данных и демо-данные: [docs/DATABASE.md](docs/DATABASE.md).
+Исследование и как оно повлияло на продукт: [docs/RESEARCH.md](docs/RESEARCH.md).
+Тестовые сценарии: [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
+Коллекция запросов Postman: [docs/postman/credit-cabinet.postman_collection.json](docs/postman/credit-cabinet.postman_collection.json).
 
 ## Что умеет проект
 
@@ -24,6 +27,27 @@
 - Rate limiting по IP.
 - Устойчивая асинхронная обработка: retry, exponential backoff, DLQ и восстановление зависших заявок.
 - S3+DB компенсация: объект удаляется при ошибке загрузки или откате транзакции.
+
+## Что вошло в MVP и почему
+
+Исследование показало, что предприниматели теряют доверие между «вам доступно» и деньгами на счёте:
+менеджер пропадает, статус непонятен, условия меняются. Поэтому MVP закрывает путь от потребности
+до выдачи, а внимание в нём на прозрачности и честных условиях. Скорость одобрения здесь вторична.
+Подробности и источники в [docs/RESEARCH.md](docs/RESEARCH.md).
+
+| Этап | Кто участвует | Данные и проверки | Что в MVP |
+|---|---|---|---|
+| Потребность и выбор продукта | клиент | цель, сумма, срок | квиз, подбор по цели, предварительный лимит по ИНН |
+| Заявка | клиент | ИНН, данные ЕГРЮЛ, параметры, согласия на БКИ и ПДн | анкета в четыре шага, автозаполнение по ИНН, согласие по 218-ФЗ до отправки |
+| Сбор данных | конвейер | ЕГРЮЛ, ФНС, БКИ, данные банка (моки) | retry, circuit breaker, ручная проверка вместо ошибки при сбое источника |
+| Скоринг | конвейер | 10 факторов, стоп-факторы | балльная модель с объяснимыми факторами |
+| Решение | конвейер, специалист | балл, лимит, сумма, ответ источников | одобрение, контрпредложения, отказ, ручная проверка, запрос документов |
+| Объяснение | клиент, специалист | факторы скоринга | текст от локальной LLM с проверкой чисел, иначе шаблон |
+| Подписание и выдача | клиент | выбранное предложение | смоделированы внутри интерфейса, без SMS и реальных платежей |
+
+Что не вошло: прогноз кассового разрыва, единый лимит на несколько продуктов, кредитные каникулы
+и реструктуризация, персональная лента новостей, реальные интеграции с системами банка.
+Почему, написано в [docs/RESEARCH.md](docs/RESEARCH.md#что-сознательно-не-вошло-в-mvp).
 
 ## Стек
 
@@ -175,6 +199,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
 
 Если нужен только API-сценарий без веба, есть `scripts/demo-run.sh`
 (требуется bash + curl + perl).
+
+Коллекция Postman [docs/postman/credit-cabinet.postman_collection.json](docs/postman/credit-cabinet.postman_collection.json)
+проходит путь клиента и ручную проверку и сама подставляет id между запросами.
+Как запустить её через Runner или newman, описано в [docs/TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md).
 
 Ручной чек-лист в браузере:
 
@@ -346,6 +374,43 @@ Basic Auth:
 
 ## Статусы
 
+Переходы задаёт `ApplicationStateMachine`, любой другой переход сервер отклоняет.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT: клиент создал заявку
+    DRAFT --> ENRICHMENT: согласия подписаны, заявка отправлена
+    ENRICHMENT --> SCORING: данные собраны
+    ENRICHMENT --> MANUAL_REVIEW: источник не ответил
+    ENRICHMENT --> REJECTED: стоп-фактор
+    SCORING --> DECISION
+    SCORING --> MANUAL_REVIEW
+    SCORING --> REJECTED
+    DECISION --> APPROVED
+    DECISION --> COUNTER_OFFER: сумма выше лимита
+    DECISION --> REJECTED
+    DECISION --> MANUAL_REVIEW: сумма больше 10 млн
+    MANUAL_REVIEW --> APPROVED: специалист одобрил
+    MANUAL_REVIEW --> COUNTER_OFFER: другие условия
+    MANUAL_REVIEW --> NEEDS_MORE_INFO: запрос документов
+    MANUAL_REVIEW --> REJECTED
+    NEEDS_MORE_INFO --> MANUAL_REVIEW: клиент загрузил документ
+    APPROVED --> SIGNING: клиент принял предложение
+    COUNTER_OFFER --> SIGNING: клиент выбрал вариант
+    SIGNING --> FUNDED: подписание и выдача
+    DRAFT --> CLOSED
+    ENRICHMENT --> CLOSED
+    MANUAL_REVIEW --> CLOSED
+    NEEDS_MORE_INFO --> CLOSED
+    APPROVED --> CLOSED
+    COUNTER_OFFER --> CLOSED
+    FUNDED --> [*]
+    REJECTED --> [*]
+    CLOSED --> [*]
+```
+
+То же текстом:
+
 ```text
 DRAFT -> ENRICHMENT -> SCORING -> DECISION -> APPROVED / COUNTER_OFFER / REJECTED / MANUAL_REVIEW
 MANUAL_REVIEW -> APPROVED / COUNTER_OFFER / REJECTED / NEEDS_MORE_INFO / CLOSED
@@ -505,6 +570,16 @@ app:
 
 Если ИИ недоступен или в ответе появляются числа, которых нет во входных данных,
 возвращается детерминированный шаблон.
+
+Ollama выгружает модель из памяти после 5 минут простоя, и первый запрос после этого грузит её
+дольше 10 секунд. Приложение не ждёт и отдаёт шаблон, следующие объяснения снова пишет модель.
+Перед показом модель можно прогреть и оставить в памяти на час:
+
+```bash
+ollama run qwen2.5:7b "Привет" --keepalive 1h
+```
+
+На медленной машине без GPU поднимите таймаут: `APP_AI_TIMEOUT_SECONDS=30 docker compose up -d`.
 
 ## Ограничения
 

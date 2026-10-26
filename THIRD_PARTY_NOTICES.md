@@ -36,6 +36,7 @@
 *   **Jackson** и **jackson-module-kotlin** (Apache License 2.0) — работа с JSON.
 *   **JUnit 5** (Eclipse Public License 2.0) и **Spring Boot Test** (Apache License 2.0) — тесты.
 *   **Testcontainers** (MIT License) — PostgreSQL и Redis в интеграционных тестах.
+*   **Newman** (Apache License 2.0), образ `postman/newman` — необязательный запуск коллекции запросов из `docs/postman` в терминале.
 
 ## 4b. Docker-образы
 
