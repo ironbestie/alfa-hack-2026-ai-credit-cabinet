@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { AccountMenu } from "@/components/account-menu";
 import { NavLinks, StaticNavLinks } from "@/components/nav-links";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export function SiteHeader() {
   return (
@@ -21,9 +20,7 @@ export function SiteHeader() {
             </Suspense>
           </nav>
         </div>
-        <Link href="/apply" className={cn(buttonVariants(), "h-10 rounded-xl px-5 font-semibold")}>
-          Оформить заявку
-        </Link>
+        <AccountMenu />
       </div>
     </header>
   );

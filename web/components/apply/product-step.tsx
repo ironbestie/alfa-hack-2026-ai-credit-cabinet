@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { recommendProducts } from "@/api/quiz";
 import type { CreditProduct } from "@/api/types";
@@ -14,9 +15,10 @@ import type { ApplyValues } from "./schema";
 
 type ProductStepProps = {
   onProductChange: (product: CreditProduct) => void;
+  preferredProductId?: string | null;
 };
 
-export function ProductStep({ onProductChange }: ProductStepProps) {
+export function ProductStep({ onProductChange, preferredProductId }: ProductStepProps) {
   const { control, setValue, formState } = useFormContext<ApplyValues>();
   const [purpose, productId, amount, termMonths] = useWatch({
     control,
@@ -27,6 +29,14 @@ export function ProductStep({ onProductChange }: ProductStepProps) {
     queryKey: ["quiz", { purpose, amount, termMonths }],
     queryFn: () => recommendProducts({ purpose, amount, termMonths }),
     enabled: !!purpose,
+  });
+
+  const preferred = products.data?.find((p) => p.id === preferredProductId);
+  const autoSelected = useRef(false);
+  useEffect(() => {
+    if (!preferred || productId || autoSelected.current) return;
+    autoSelected.current = true;
+    selectProduct(preferred);
   });
 
   function selectProduct(product: CreditProduct) {

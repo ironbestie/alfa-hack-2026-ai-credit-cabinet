@@ -2,25 +2,31 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { createApplication, signConsents, submitApplication } from "@/api/applications";
-import type { CompanyLookup, CreditProduct } from "@/api/types";
+import type { Company, CreditProduct, LoanPurpose } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { saveClientInn } from "@/lib/session";
+import { getRole, saveClientInn, setRole } from "@/lib/session";
 import { zodResolver } from "@/lib/zod-resolver";
 import { CompanyStep } from "./company-step";
 import { ConfirmStep } from "./confirm-step";
 import { ProductStep } from "./product-step";
-import { applySchema, stepFields, stepTitles, type ApplyValues } from "./schema";
+import { applySchema, purposeLabels, stepFields, stepTitles, type ApplyValues } from "./schema";
 import { TermsStep } from "./terms-step";
+
+function numberParam(value: string | null, fallback: number) {
+  const n = Number(value);
+  return value && Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 export function ApplyWizard() {
   const router = useRouter();
+  const params = useSearchParams();
   const [step, setStep] = useState(0);
-  const [company, setCompany] = useState<CompanyLookup | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [product, setProduct] = useState<CreditProduct | null>(null);
   const idempotencyKey = useRef<string | null>(null);
 
@@ -28,10 +34,11 @@ export function ApplyWizard() {
     resolver: zodResolver(applySchema),
     defaultValues: {
       inn: "",
+      purpose: (params.get("purpose") as LoanPurpose | null) ?? undefined,
       productId: "",
-      amount: 3_000_000,
-      termMonths: 24,
-      protection: false,
+      amount: numberParam(params.get("amount"), 3_000_000),
+      termMonths: numberParam(params.get("term"), 24),
+      hasCollateral: false,
       consentBki: false,
       consentPersonalData: false,
     },
@@ -39,13 +46,16 @@ export function ApplyWizard() {
 
   const send = useMutation({
     mutationFn: async (values: ApplyValues) => {
+      if (getRole() !== "client") setRole("client");
       idempotencyKey.current ??= crypto.randomUUID();
       const application = await createApplication(
         {
-          companyId: company!.id!,
+          companyId: company!.id,
           productId: values.productId,
           requestedAmount: values.amount,
           requestedTermMonths: values.termMonths,
+          purpose: purposeLabels[values.purpose],
+          hasCollateral: values.hasCollateral,
         },
         idempotencyKey.current,
       );
@@ -57,7 +67,10 @@ export function ApplyWizard() {
       saveClientInn(values.inn);
       router.push(`/applications/${application.id}`);
     },
-    onError: (error) => form.setError("root", { message: error.message }),
+    onError: (error) => {
+      idempotencyKey.current = null;
+      form.setError("root", { message: error.message });
+    },
   });
 
   async function next() {
@@ -65,7 +78,6 @@ export function ApplyWizard() {
     setStep((s) => s + 1);
   }
 
-  const canSend = !!company?.id;
   const isLast = step === stepTitles.length - 1;
 
   return (
@@ -82,15 +94,9 @@ export function ApplyWizard() {
         </div>
 
         {step === 0 && <CompanyStep company={company} onCompanyChange={setCompany} onNext={next} />}
-        {step === 1 && <ProductStep onProductChange={setProduct} />}
-        {step === 2 && product && <TermsStep product={product} />}
+        {step === 1 && <ProductStep onProductChange={setProduct} preferredProductId={params.get("product")} />}
+        {step === 2 && product && company && <TermsStep product={product} inn={company.inn} />}
         {step === 3 && product && <ConfirmStep product={product} />}
-
-        {isLast && !canSend && (
-          <p className="text-sm text-muted-foreground">
-            Отправим заявку, когда проверим компанию в ФНС. Черновик сохранится.
-          </p>
-        )}
 
         {step > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
@@ -100,7 +106,7 @@ export function ApplyWizard() {
             {isLast ? (
               <Button
                 className="h-11 rounded-xl px-6 font-semibold"
-                disabled={!canSend || send.isPending}
+                disabled={send.isPending}
                 onClick={form.handleSubmit((values) => send.mutate(values))}
               >
                 {send.isPending && <Loader2 className="animate-spin" />}

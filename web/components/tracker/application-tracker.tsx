@@ -1,19 +1,22 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, PartyPopper } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { acceptOffer, getExplanation, getOffers, signOffer } from "@/api/applications";
+import { acceptOffer, getExplanation, getOffers, getScore, signOffer } from "@/api/applications";
 import type { Application } from "@/api/types";
+import { DocumentsPanel } from "@/components/documents-panel";
 import { ErrorState } from "@/components/error-state";
-import { Badge } from "@/components/ui/badge";
+import { ScoreFactors } from "@/components/score-factors";
+import { StatusBadge } from "@/components/status-badge";
+import { Timeline } from "@/components/timeline";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApplicationStatus } from "@/hooks/use-application-status";
-import { formatMonths, formatRate, formatRub, formatTime } from "@/lib/format";
-import { statusLabels, trackerStepIndex, trackerSteps } from "@/lib/statuses";
+import { formatMonths, formatRate, formatRub } from "@/lib/format";
+import { decidedStatuses, offerTypeLabels, processingStatuses, statusLabels, trackerStepIndex, trackerSteps } from "@/lib/statuses";
 import { cn } from "@/lib/utils";
 
 export function TrackerSkeleton() {
@@ -40,15 +43,20 @@ export function ApplicationTracker() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-bold">Заявка на {formatRub(app.requestedAmount)}</h1>
-        <Badge variant={app.status === "REJECTED" ? "destructive" : "secondary"}>{statusLabels[app.status]}</Badge>
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          {app.company.name} · {app.product.name}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold">Заявка на {formatRub(app.requestedAmount)}</h1>
+          <StatusBadge status={app.status} />
+        </div>
       </div>
 
-      <ol className="grid gap-2 sm:grid-cols-6">
+      <ol className="grid gap-3 sm:grid-cols-6">
         {trackerSteps.map((step, i) => {
-          const done = i < current;
-          const active = i === current;
+          const done = i < current || app.status === "FUNDED";
+          const active = i === current && app.status !== "FUNDED";
           return (
             <li key={step.key} className="flex items-center gap-3 sm:flex-col sm:items-start">
               <span
@@ -69,6 +77,10 @@ export function ApplicationTracker() {
 
       <Decision app={app} />
 
+      {(app.status === "NEEDS_MORE_INFO" || app.status === "MANUAL_REVIEW") && (
+        <DocumentsPanel applicationId={app.id} canUpload={app.status === "NEEDS_MORE_INFO"} />
+      )}
+
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">История</h2>
         {timeline.isPending ? (
@@ -76,18 +88,7 @@ export function ApplicationTracker() {
         ) : timeline.isError ? (
           <ErrorState error={timeline.error} onRetry={() => timeline.refetch()} />
         ) : (
-          <ul className="space-y-2">
-            {[...timeline.data].reverse().map((event) => (
-              <li
-                key={`${event.timestamp}-${event.eventType}`}
-                className="flex gap-4 rounded-xl border border-border bg-card px-4 py-3 text-sm"
-              >
-                <span className="w-12 shrink-0 text-muted-foreground">{formatTime(event.timestamp)}</span>
-                <span className="flex-1">{event.description}</span>
-                <span className="text-muted-foreground">{event.actor}</span>
-              </li>
-            ))}
-          </ul>
+          <Timeline events={timeline.data.items} />
         )}
       </section>
     </div>
@@ -96,38 +97,52 @@ export function ApplicationTracker() {
 
 function Decision({ app }: { app: Application }) {
   const queryClient = useQueryClient();
-  const decided = ["APPROVED", "COUNTER_OFFER", "REJECTED"].includes(app.status);
+  const decided = decidedStatuses.includes(app.status);
+  const scored = app.riskScore !== null;
 
   const explanation = useQuery({
-    queryKey: ["application", app.id, "explanation"],
+    queryKey: ["application", app.id, "explanation", app.status],
     queryFn: () => getExplanation(app.id),
-    enabled: decided,
+    enabled: decided || app.status === "NEEDS_MORE_INFO",
   });
   const offers = useQuery({
-    queryKey: ["application", app.id, "offers"],
+    queryKey: ["application", app.id, "offers", app.status],
     queryFn: () => getOffers(app.id),
-    enabled: decided,
+    enabled: app.status === "APPROVED" || app.status === "COUNTER_OFFER",
+  });
+  const score = useQuery({
+    queryKey: ["application", app.id, "score", app.riskScore],
+    queryFn: () => getScore(app.id),
+    enabled: decided && scored,
+    retry: false,
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["application", app.id] });
   const accept = useMutation({
-    mutationFn: () => acceptOffer(app.id),
+    mutationFn: (offerId: string) => acceptOffer(app.id, offerId),
     onSuccess: refresh,
     onError: (error) => toast.error(error.message),
   });
   const sign = useMutation({
     mutationFn: () => signOffer(app.id),
-    onSuccess: refresh,
+    onSuccess: () => {
+      toast.success("Документы подписаны");
+      refresh();
+    },
     onError: (error) => toast.error(error.message),
   });
 
-  if (["SUBMITTED", "ENRICHMENT", "SCORING", "MANUAL_REVIEW"].includes(app.status)) {
+  if (processingStatuses.includes(app.status)) {
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-5">
-        <Loader2 className="size-5 animate-spin text-primary" />
+        <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
         <div>
           <p className="font-semibold">{statusLabels[app.status]}</p>
-          <p className="text-sm text-muted-foreground">Обновим страницу сами, как только будет решение</p>
+          <p className="text-sm text-muted-foreground">
+            {app.status === "MANUAL_REVIEW"
+              ? "Заявку смотрит специалист. Обычно это занимает до 15 минут."
+              : "Страница обновится сама, как только будет решение"}
+          </p>
         </div>
       </div>
     );
@@ -137,8 +152,10 @@ function Decision({ app }: { app: Application }) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary bg-card p-5">
         <div>
-          <p className="font-semibold">Осталось подписать документы</p>
-          <p className="text-sm text-muted-foreground">Подпись по коду из SMS</p>
+          <p className="font-semibold">
+            Осталось подписать договор на {formatRub(app.approvedAmount ?? app.requestedAmount)}
+          </p>
+          <p className="text-sm text-muted-foreground">Подпись по коду из SMS. Для демо код 1234 подставится сам.</p>
         </div>
         <Button className="h-11 rounded-xl px-6" disabled={sign.isPending} onClick={() => sign.mutate()}>
           {sign.isPending && <Loader2 className="animate-spin" />}
@@ -150,14 +167,23 @@ function Decision({ app }: { app: Application }) {
 
   if (app.status === "FUNDED") {
     return (
-      <div className="rounded-2xl border border-success bg-success/10 p-5">
-        <p className="font-semibold">Деньги отправлены на счёт</p>
-        <p className="text-sm text-muted-foreground">Обычно они приходят в течение часа</p>
+      <div className="flex items-start gap-4 rounded-2xl border border-success bg-success/10 p-5">
+        <PartyPopper className="size-6 shrink-0 text-success" />
+        <div>
+          <p className="font-heading text-xl font-bold">
+            {formatRub(app.approvedAmount ?? app.requestedAmount)} уже{" "}
+            <span className="font-accent font-medium italic">на счёте</span>
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {app.approvedTermMonths ? `${formatMonths(app.approvedTermMonths)}. ` : ""}График платежей придёт в
+            приложение банка.
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (!decided) return null;
+  if (!decided && app.status !== "NEEDS_MORE_INFO") return null;
 
   return (
     <section className="space-y-4">
@@ -166,57 +192,86 @@ function Decision({ app }: { app: Application }) {
       ) : explanation.isError ? (
         <ErrorState error={explanation.error} onRetry={() => explanation.refetch()} />
       ) : (
-        <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
           <p className="text-lg font-semibold">{explanation.data.summary}</p>
-          {explanation.data.reasons.length > 0 && (
-            <div>
-              <p className="text-sm text-muted-foreground">Почему так</p>
-              <ul className="list-disc pl-5 text-sm">
-                {explanation.data.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {explanation.data.nextSteps.length > 0 && (
-            <div>
-              <p className="text-sm text-muted-foreground">Что можно сделать</p>
-              <ul className="list-disc pl-5 text-sm">
-                {explanation.data.nextSteps.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="grid gap-4 md:grid-cols-2">
+            {explanation.data.reasons.length > 0 && (
+              <div>
+                <p className="font-hand text-xl text-muted-foreground">почему так</p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                  {explanation.data.reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {explanation.data.nextSteps.length > 0 && (
+              <div>
+                <p className="font-hand text-xl text-muted-foreground">что можно сделать</p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                  {explanation.data.nextSteps.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {offers.data && offers.data.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {offers.data.map((offer) => {
-            const acceptable = offer.id === app.id;
-            return (
-              <div key={offer.id} className="space-y-3 rounded-2xl border border-border bg-card p-5">
-                <p className="font-heading text-2xl font-bold">{formatRub(offer.amount)}</p>
-                <p className="text-sm text-muted-foreground">
-                  {formatMonths(offer.termMonths)} · ставка {formatRate(offer.interestRate)}
-                  {offer.type === "STATE_GUARANTEE" && " · с поручительством Корпорации МСП"}
-                </p>
-                {acceptable ? (
-                  <Button className="h-11 w-full rounded-xl" disabled={accept.isPending} onClick={() => accept.mutate()}>
-                    {accept.isPending && <Loader2 className="animate-spin" />}
-                    Принять
-                  </Button>
-                ) : (
-                  <Link href="/apply" className={cn(buttonVariants({ variant: "outline" }), "h-11 w-full rounded-xl")}>
-                    Оформить новую заявку
-                  </Link>
+        <div className="space-y-3">
+          <h2 className="text-xl font-semibold">
+            {offers.data.length > 1 ? "Выберите предложение" : "Ваше предложение"}
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            {offers.data.map((offer, i) => (
+              <div
+                key={offer.id}
+                className={cn(
+                  "flex flex-col gap-3 rounded-2xl border bg-card p-5",
+                  i === 0 ? "border-primary" : "border-border",
                 )}
+              >
+                <p className="text-sm text-muted-foreground">{offerTypeLabels[offer.type] ?? offer.type}</p>
+                <p className="font-heading text-2xl font-bold">{formatRub(offer.amount)}</p>
+                <dl className="space-y-1 text-sm">
+                  <OfferRow label="Срок" value={formatMonths(offer.termMonths)} />
+                  <OfferRow label="Ставка" value={formatRate(offer.interestRate)} />
+                  <OfferRow label="Платёж" value={formatRub(offer.monthlyPayment)} />
+                  <OfferRow label="Переплата" value={formatRub(offer.overpayment)} />
+                </dl>
+                <Button
+                  className="mt-auto h-11 rounded-xl"
+                  variant={i === 0 ? "default" : "outline"}
+                  disabled={accept.isPending}
+                  onClick={() => accept.mutate(offer.id)}
+                >
+                  {accept.isPending && accept.variables === offer.id && <Loader2 className="animate-spin" />}
+                  Принять
+                </Button>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
+
+      {app.status === "REJECTED" && (
+        <Link href="/quiz" className={cn(buttonVariants({ variant: "outline" }), "h-11 rounded-xl px-6")}>
+          Подобрать другой продукт
+        </Link>
+      )}
+
+      {score.data && <ScoreFactors score={score.data} />}
     </section>
+  );
+}
+
+function OfferRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-medium">{value}</dd>
+    </div>
   );
 }

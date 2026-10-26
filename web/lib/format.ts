@@ -57,3 +57,12 @@ export function yearsSince(iso: string) {
   if (beforeAnniversary) years -= 1;
   return years;
 }
+
+export function waitingFor(iso: string, now: number) {
+  const minutes = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч ${minutes % 60} мин`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${pluralize(days, "день", "дня", "дней")}`;
+}
