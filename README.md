@@ -195,7 +195,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke.ps1
 
 ### Чистая база и Flyway
 
-Схема и демо-данные создаются миграциями `V1`–`V5` при старте приложения.
+Схема и демо-данные создаются миграциями `V1`–`V6` при старте приложения.
 Hibernate работает в режиме `ddl-auto: validate` и только проверяет схему.
 
 Если база осталась от старой версии проекта и миграции не сходятся, поднимите
@@ -469,8 +469,30 @@ mvn -B -ntp clean test
 
 ## ИИ-объяснения
 
-`AiAssistantClient` использует OpenAI-совместимый `/v1/chat/completions`
-(подходит Ollama и внешние провайдеры). Настройки:
+ИИ пишет клиенту короткое объяснение решения и резюме для менеджера. Решение по кредиту он не принимает: балл, грейд и предложения считаются правилами, модель только пересказывает готовые факты. Без модели всё работает, вместо её текста показывается шаблон, а на карточке менеджера написано, какой текст перед ним.
+
+Модель по умолчанию: Qwen2.5-7B-Instruct, открытые веса, Apache License 2.0 (<https://huggingface.co/Qwen/Qwen2.5-7B-Instruct>). Запускается через Ollama на той же машине, отдельно от Docker:
+
+```bash
+ollama pull qwen2.5:7b
+ollama serve
+```
+
+`ollama pull` один раз скачивает около 4,7 ГБ. На Windows и macOS после установки Ollama сервер обычно уже запущен, `ollama serve` тогда не нужен. Контейнер `app` обращается к модели по адресу `http://host.docker.internal:11434`, это уже прописано в `docker-compose.yaml`.
+
+Проверить, что модель отвечает:
+
+```bash
+curl http://localhost:11434/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"qwen2.5:7b\",\"messages\":[{\"role\":\"user\",\"content\":\"Привет\"}]}"
+```
+
+Чтобы подключить другой OpenAI-совместимый провайдер, перед `docker compose up` задайте переменные:
+
+```bash
+APP_AI_BASE_URL=https://api.example.com APP_AI_API_KEY=ключ APP_AI_MODEL=имя-модели docker compose up -d --build
+```
+
+`AiAssistantClient` использует OpenAI-совместимый `/v1/chat/completions`. Настройки:
 
 ```yaml
 app:

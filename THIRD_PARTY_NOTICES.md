@@ -4,7 +4,7 @@
 
 ## 1. Основной стек и фреймворки (Java/Kotlin)
 
-*   **Java 21** (Oracle Binary Code License) — язык программирования.
+*   **Java 21, Eclipse Temurin** (GPLv2 with Classpath Exception) — среда выполнения бэкенда, используется в Docker-образах `eclipse-temurin:21-jre` и `maven:3.9-eclipse-temurin-21`.
 *   **Kotlin 2.1.0** (Apache License 2.0) — язык программирования для бэкенда.
 *   **Spring Boot 3.5.0** (Apache License 2.0) — основной фреймворк для создания приложения.
 *   **Spring Modulith 1.3.0** (Apache License 2.0) — реализация паттерна Transactional Outbox и модульной архитектуры.
@@ -30,6 +30,26 @@
 *   **Spring Security** (Apache License 2.0) — аутентификация и авторизация (Basic Auth для MVP).
 *   **Springdoc OpenAPI 2.8.5** (Apache License 2.0) — генерация Swagger UI и документации API.
 
+## 4a. Сборка и тесты
+
+*   **Apache Maven 3.9** и **Maven Wrapper** (Apache License 2.0) — сборка бэкенда.
+*   **Jackson** и **jackson-module-kotlin** (Apache License 2.0) — работа с JSON.
+*   **JUnit 5** (Eclipse Public License 2.0) и **Spring Boot Test** (Apache License 2.0) — тесты.
+*   **Testcontainers** (MIT License) — PostgreSQL и Redis в интеграционных тестах.
+
+## 4b. Docker-образы
+
+| Образ | Зачем | Лицензия |
+|---|---|---|
+| `postgres:16-alpine` | база данных | PostgreSQL License |
+| `redis:7-alpine` | идемпотентность и rate limit | BSD-3-Clause |
+| `elestio/minio` (закреплён по digest) | хранение документов | AGPLv3 |
+| `wiremock/wiremock:3.9.1` | моки внешних сервисов | Apache License 2.0 |
+| `maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre` | сборка и запуск бэкенда | Apache License 2.0 (образ), GPLv2 + Classpath Exception (JDK) |
+| `node:24-alpine` | сборка и запуск веб-кабинета | MIT License |
+
+MinIO и PostgreSQL запускаются отдельными сервисами и не встраиваются в код проекта.
+
 ## 5. Внешние интеграции (Симуляции / Моки)
 
 Согласно условиям хакатона (стр. 10), реальные интеграции с корпоративными системами банка не используются. Все внешние сервисы сымитированы с помощью **WireMock 3.9.1** (Apache License 2.0):
@@ -44,7 +64,7 @@
 ## 6. Искусственный интеллект (ИИ)
 
 *   **Ollama** (MIT License) — локальный сервер для запуска LLM.
-*   **Qwen2.5-7B-Instruct** (Apache License 2.0) — локальная языковая модель с открытыми весами, используемая для генерации объяснений решений (функция H3) и резюме для менеджера.
+*   **Qwen2.5-7B-Instruct** (Apache License 2.0) — локальная языковая модель с открытыми весами, используемая для генерации объяснений решений (функция H3) и резюме для менеджера. Источник: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct, в Ollama модель называется `qwen2.5:7b`.
     *   *Примечание:* В случае недоступности модели или превышения таймаута, система использует заранее подготовленный шаблонный текст (Fallback), чтобы основной сценарий не прерывался.
 
 ## 7. Фронтенд (веб-кабинет)
