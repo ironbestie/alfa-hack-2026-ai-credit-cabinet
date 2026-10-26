@@ -118,7 +118,11 @@ export function ManagerApplicationCard() {
                   ))}
                 </ul>
               )}
-              <p className="font-plain text-xs text-muted-foreground">Текст подготовлен ИИ-ассистентом, решение принимает специалист.</p>
+              <p className="font-plain text-xs text-muted-foreground">
+                {explanation.data.generatedByAi
+                  ? "Текст подготовлен ИИ-ассистентом, решение принимает специалист."
+                  : "Текст собран по шаблону из факторов скоринга, решение принимает специалист."}
+              </p>
             </section>
           )}
 

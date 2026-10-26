@@ -149,6 +149,7 @@ export type Explanation = {
   summary: string;
   reasons: string[];
   nextSteps: string[];
+  generatedByAi?: boolean;
 };
 
 export type ScoreFactor = {

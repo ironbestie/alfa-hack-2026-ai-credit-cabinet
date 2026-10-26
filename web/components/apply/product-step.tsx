@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { recommendProducts } from "@/api/quiz";
 import type { CreditProduct } from "@/api/types";
@@ -31,12 +31,10 @@ export function ProductStep({ onProductChange, preferredProductId }: ProductStep
     enabled: !!purpose,
   });
 
-  const preferred = products.data?.find((p) => p.id === preferredProductId);
-  const autoSelected = useRef(false);
+  const suggested = products.data?.find((p) => p.id === preferredProductId) ?? products.data?.[0];
   useEffect(() => {
-    if (!preferred || productId || autoSelected.current) return;
-    autoSelected.current = true;
-    selectProduct(preferred);
+    if (!suggested || productId) return;
+    selectProduct(suggested);
   });
 
   function selectProduct(product: CreditProduct) {

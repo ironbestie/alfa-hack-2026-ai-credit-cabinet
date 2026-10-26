@@ -197,11 +197,20 @@ export function DecisionForm({ application }: { application: Application }) {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="comment">Комментарий для клиента</Label>
+        <Label htmlFor="comment">
+          Комментарий для клиента
+          {!withTerms && <span className="text-destructive"> обязательно</span>}
+        </Label>
         <Textarea
           id="comment"
           rows={3}
-          placeholder={decisionType === "REQUEST_DOCS" ? "Например: загрузите выписку по счёту за 6 месяцев" : "Необязательно"}
+          placeholder={
+            decisionType === "REQUEST_DOCS"
+              ? "Например: загрузите выписку по счёту за 6 месяцев"
+              : decisionType === "REJECT"
+                ? "Коротко объясните клиенту причину отказа"
+                : "Необязательно"
+          }
           aria-invalid={!!errors.comment}
           {...form.register("comment")}
         />
